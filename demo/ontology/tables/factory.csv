@@ -1,0 +1,5 @@
+FactoryId,Code,City,Country,Region,TimeZone
+FAC-BCN,EMEA-BCN,Barcelona,Spain,EMEA,Europe/Madrid
+FAC-CHI,NA-CHI,Chicago,United States,North America,America/Chicago
+FAC-GRU,LATAM-GRU,São Paulo,Brazil,LATAM,America/Sao_Paulo
+FAC-SIN,APAC-SIN,Singapore,Singapore,APAC,Asia/Singapore

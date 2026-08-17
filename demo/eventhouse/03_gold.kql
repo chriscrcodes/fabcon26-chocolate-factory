@@ -1,0 +1,98 @@
+// Gold: one true materialized view (single source), three stored
+// functions (multiple sources -- can't be MVs, see the medallion-layers
+// design memo's Reality check). Run 01 and 02 first.
+
+// ---------------------------------------------------------------------
+// gold_defect_rate_by_stage_daily -- single source (silver_quality_check),
+// a real materialized view.
+// ---------------------------------------------------------------------
+
+.create materialized-view gold_defect_rate_by_stage_daily on table silver_quality_check
+{
+    silver_quality_check
+    | summarize
+        AvgDefectRate = avg(DefectRate),
+        FailCount = countif(Result == 'Fail'),
+        CheckCount = count()
+      by FactoryCode, StageName, Day = bin(Timestamp, 1d)
+}
+
+// ---------------------------------------------------------------------
+// gold_line_throughput_hourly() -- joins silver_grinding + silver_packaging.
+// Two independently-ingested sources, so this is a function, not an MV.
+// ---------------------------------------------------------------------
+
+.create-or-alter function gold_line_throughput_hourly() {
+    let grinding_hourly =
+        silver_grinding
+        | summarize AvgThroughputKgPerHr = avg(ThroughputKgPerHr)
+          by LineId, LineName, FactoryCode, Hour = bin(Timestamp, 1h);
+    let packaging_hourly =
+        silver_packaging
+        | summarize AvgLineSpeedUnitsPerMin = avg(LineSpeedUnitsPerMin)
+          by LineId, LineName, FactoryCode, Hour = bin(Timestamp, 1h);
+    grinding_hourly
+    | join kind=inner packaging_hourly on LineId, FactoryCode, Hour
+    | project Hour, LineId, LineName, FactoryCode, AvgThroughputKgPerHr, AvgLineSpeedUnitsPerMin
+}
+
+// ---------------------------------------------------------------------
+// gold_batch_summary() -- joins silver_batch + silver_quality_check
+// (silver_batch alone doesn't carry LineName/FactoryCode -- looked up
+// here rather than adding a join to the silver_batch materialized view).
+// ---------------------------------------------------------------------
+
+.create-or-alter function gold_batch_summary() {
+    let qc =
+        silver_quality_check
+        | summarize
+            AvgDefectRate = avg(DefectRate),
+            FailCount = countif(Result == 'Fail'),
+            CheckCount = count()
+          by BatchId;
+    silver_batch
+    | lookup kind=leftouter ref_production_line on LineId
+    | project-rename LineName = Name
+    | lookup kind=leftouter ref_factory on FactoryId
+    | project-rename FactoryCode = Code
+    | join kind=leftouter qc on BatchId
+    | extend CycleTimeMinutes = datetime_diff('minute', EndTime, StartTime)
+    | project BatchId, LineId, LineName, FactoryId, FactoryCode, RecipeId,
+              StartTime, EndTime, Status, CycleTimeMinutes,
+              AvgDefectRate, FailCount, CheckCount
+}
+
+// ---------------------------------------------------------------------
+// gold_factory_oee_daily() -- Availability x Performance x Quality.
+// Availability comes from pairing each Down/Running transition in
+// silver_line_status (prev() needs an explicit `serialize` per Kusto's
+// windowing-function docs). Performance is throughput against a fixed
+// ideal (260 kg/h -- grinding's normal-range upper bound in
+// stage_catalog.py; a demo simplification, not a real capacity study).
+// ---------------------------------------------------------------------
+
+.create-or-alter function gold_factory_oee_daily() {
+    let ideal_throughput_kg_per_hr = 260.0;
+    let downtime =
+        silver_line_status
+        | order by LineId asc, Timestamp asc
+        | serialize
+        | extend PrevStatus = prev(Status), PrevTimestamp = prev(Timestamp), PrevLineId = prev(LineId)
+        | where Status == 'Running' and PrevStatus == 'Down' and LineId == PrevLineId
+        | extend DownMinutes = datetime_diff('minute', Timestamp, PrevTimestamp)
+        | summarize TotalDownMinutes = sum(DownMinutes) by FactoryCode, Day = bin(Timestamp, 1d);
+    let performance =
+        silver_grinding
+        | summarize AvgThroughputKgPerHr = avg(ThroughputKgPerHr) by FactoryCode, Day = bin(Timestamp, 1d)
+        | extend Performance = min_of(AvgThroughputKgPerHr / ideal_throughput_kg_per_hr, 1.0);
+    let quality =
+        silver_quality_check
+        | summarize AvgDefectRate = avg(DefectRate) by FactoryCode, Day = bin(Timestamp, 1d)
+        | extend Quality = 1.0 - AvgDefectRate;
+    downtime
+    | join kind=fullouter performance on FactoryCode, Day
+    | join kind=fullouter quality on FactoryCode, Day
+    | extend Availability = 1.0 - (coalesce(TotalDownMinutes, 0.0) / 1440.0)
+    | extend OEE = Availability * coalesce(Performance, 1.0) * coalesce(Quality, 1.0)
+    | project Day, FactoryCode, Availability, Performance, Quality, OEE
+}

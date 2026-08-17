@@ -1,0 +1,4 @@
+RecipeId,Name,CacaoPercent,MilkPercent,SugarPercent
+RCP-DARK70,Dark 70%,70,0,30
+RCP-MILK35,Milk 35%,35,25,40
+RCP-WHITE,White,0,30,45

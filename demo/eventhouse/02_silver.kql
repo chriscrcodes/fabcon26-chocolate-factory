@@ -1,0 +1,181 @@
+// Silver: EAV sensor readings pivoted into per-stage wide tables, plus
+// enriched quality checks and line status, plus the one true materialized
+// view (silver_batch has a single, unjoined source -- bronze_batch_event).
+// Run 01_bronze_and_reference.kql first.
+
+// ---------------------------------------------------------------------
+// Shared dimension lookup, reused by every table below
+// ---------------------------------------------------------------------
+
+.create-or-alter function EnrichLine(T: (LineId: string)) {
+    T
+    | lookup kind=leftouter ref_production_line on LineId
+    | project-rename LineName = Name
+    | lookup kind=leftouter ref_factory on FactoryId
+    | project-rename FactoryCode = Code
+}
+
+// ---------------------------------------------------------------------
+// Per-stage pivot tables (Factory Processing + Finishing, 6 total)
+// Each one: filter bronze_sensor_reading to its StageId, pivot
+// Metric/Value into named columns, enrich with line + factory.
+// ---------------------------------------------------------------------
+
+.create table silver_grinding (
+    Timestamp: datetime, LineId: string, LineName: string, FactoryId: string, FactoryCode: string,
+    StageId: string, BatchId: string,
+    ParticleSizeMicron: real, MotorTemperatureC: real, ThroughputKgPerHr: real
+)
+.create-or-alter function SilverGrindingTransform() {
+    bronze_sensor_reading
+    | where StageId == 'grinding'
+    | project LineId, StageId, BatchId, Timestamp, Metric, Value
+    | evaluate pivot(Metric, take_any(Value))
+    | invoke EnrichLine()
+    | project Timestamp, LineId, LineName, FactoryId, FactoryCode, StageId, BatchId,
+              ParticleSizeMicron, MotorTemperatureC, ThroughputKgPerHr
+}
+.alter table silver_grinding policy update
+@'[{"IsEnabled":true,"Source":"bronze_sensor_reading","Query":"SilverGrindingTransform()","IsTransactional":true,"PropagateIngestionProperties":false}]'
+
+.create table silver_mixing_refining (
+    Timestamp: datetime, LineId: string, LineName: string, FactoryId: string, FactoryCode: string,
+    StageId: string, BatchId: string,
+    ParticleSizeMicron: real, RollerTemperatureC: real, ViscosityPaS: real
+)
+.create-or-alter function SilverMixingRefiningTransform() {
+    bronze_sensor_reading
+    | where StageId == 'mixing_refining'
+    | project LineId, StageId, BatchId, Timestamp, Metric, Value
+    | evaluate pivot(Metric, take_any(Value))
+    | invoke EnrichLine()
+    | project Timestamp, LineId, LineName, FactoryId, FactoryCode, StageId, BatchId,
+              ParticleSizeMicron, RollerTemperatureC, ViscosityPaS
+}
+.alter table silver_mixing_refining policy update
+@'[{"IsEnabled":true,"Source":"bronze_sensor_reading","Query":"SilverMixingRefiningTransform()","IsTransactional":true,"PropagateIngestionProperties":false}]'
+
+.create table silver_conching (
+    Timestamp: datetime, LineId: string, LineName: string, FactoryId: string, FactoryCode: string,
+    StageId: string, BatchId: string,
+    TemperatureC: real, MoisturePercent: real, AcidityPH: real
+)
+.create-or-alter function SilverConchingTransform() {
+    bronze_sensor_reading
+    | where StageId == 'conching'
+    | project LineId, StageId, BatchId, Timestamp, Metric, Value
+    | evaluate pivot(Metric, take_any(Value))
+    | invoke EnrichLine()
+    | project Timestamp, LineId, LineName, FactoryId, FactoryCode, StageId, BatchId,
+              TemperatureC, MoisturePercent, AcidityPH
+}
+.alter table silver_conching policy update
+@'[{"IsEnabled":true,"Source":"bronze_sensor_reading","Query":"SilverConchingTransform()","IsTransactional":true,"PropagateIngestionProperties":false}]'
+
+.create table silver_tempering (
+    Timestamp: datetime, LineId: string, LineName: string, FactoryId: string, FactoryCode: string,
+    StageId: string, BatchId: string,
+    TemperatureC: real, CrystalFormIndex: real, ViscosityPaS: real
+)
+.create-or-alter function SilverTemperingTransform() {
+    bronze_sensor_reading
+    | where StageId == 'tempering'
+    | project LineId, StageId, BatchId, Timestamp, Metric, Value
+    | evaluate pivot(Metric, take_any(Value))
+    | invoke EnrichLine()
+    | project Timestamp, LineId, LineName, FactoryId, FactoryCode, StageId, BatchId,
+              TemperatureC, CrystalFormIndex, ViscosityPaS
+}
+.alter table silver_tempering policy update
+@'[{"IsEnabled":true,"Source":"bronze_sensor_reading","Query":"SilverTemperingTransform()","IsTransactional":true,"PropagateIngestionProperties":false}]'
+
+.create table silver_molding_cooling (
+    Timestamp: datetime, LineId: string, LineName: string, FactoryId: string, FactoryCode: string,
+    StageId: string, BatchId: string,
+    MoldTemperatureC: real, TunnelTemperatureC: real, VibrationHz: real
+)
+.create-or-alter function SilverMoldingCoolingTransform() {
+    bronze_sensor_reading
+    | where StageId == 'molding_cooling'
+    | project LineId, StageId, BatchId, Timestamp, Metric, Value
+    | evaluate pivot(Metric, take_any(Value))
+    | invoke EnrichLine()
+    | project Timestamp, LineId, LineName, FactoryId, FactoryCode, StageId, BatchId,
+              MoldTemperatureC, TunnelTemperatureC, VibrationHz
+}
+.alter table silver_molding_cooling policy update
+@'[{"IsEnabled":true,"Source":"bronze_sensor_reading","Query":"SilverMoldingCoolingTransform()","IsTransactional":true,"PropagateIngestionProperties":false}]'
+
+.create table silver_packaging (
+    Timestamp: datetime, LineId: string, LineName: string, FactoryId: string, FactoryCode: string,
+    StageId: string, BatchId: string,
+    LineSpeedUnitsPerMin: real, SealTemperatureC: real, RejectRatePercent: real
+)
+.create-or-alter function SilverPackagingTransform() {
+    bronze_sensor_reading
+    | where StageId == 'packaging'
+    | project LineId, StageId, BatchId, Timestamp, Metric, Value
+    | evaluate pivot(Metric, take_any(Value))
+    | invoke EnrichLine()
+    | project Timestamp, LineId, LineName, FactoryId, FactoryCode, StageId, BatchId,
+              LineSpeedUnitsPerMin, SealTemperatureC, RejectRatePercent
+}
+.alter table silver_packaging policy update
+@'[{"IsEnabled":true,"Source":"bronze_sensor_reading","Query":"SilverPackagingTransform()","IsTransactional":true,"PropagateIngestionProperties":false}]'
+
+// ---------------------------------------------------------------------
+// silver_quality_check -- enriched with line, factory, and stage name
+// ---------------------------------------------------------------------
+
+.create table silver_quality_check (
+    Timestamp: datetime, CheckId: string, BatchId: string,
+    LineId: string, LineName: string, FactoryId: string, FactoryCode: string,
+    StageId: string, StageName: string, Phase: string,
+    DefectRate: real, Result: string, Notes: string
+)
+.create-or-alter function SilverQualityCheckTransform() {
+    bronze_quality_check
+    | invoke EnrichLine()
+    | lookup kind=leftouter ref_production_stage on StageId
+    | project-rename StageName = Name
+    | project Timestamp, CheckId, BatchId, LineId, LineName, FactoryId, FactoryCode,
+              StageId, StageName, Phase, DefectRate, Result, Notes
+}
+.alter table silver_quality_check policy update
+@'[{"IsEnabled":true,"Source":"bronze_quality_check","Query":"SilverQualityCheckTransform()","IsTransactional":true,"PropagateIngestionProperties":false}]'
+
+// ---------------------------------------------------------------------
+// silver_line_status -- enriched with line + factory
+// ---------------------------------------------------------------------
+
+.create table silver_line_status (
+    Timestamp: datetime, EventId: string,
+    LineId: string, LineName: string, FactoryId: string, FactoryCode: string,
+    Status: string, Reason: string
+)
+.create-or-alter function SilverLineStatusTransform() {
+    bronze_line_status
+    | invoke EnrichLine()
+    | project Timestamp, EventId, LineId, LineName, FactoryId, FactoryCode, Status, Reason
+}
+.alter table silver_line_status policy update
+@'[{"IsEnabled":true,"Source":"bronze_line_status","Query":"SilverLineStatusTransform()","IsTransactional":true,"PropagateIngestionProperties":false}]'
+
+// ---------------------------------------------------------------------
+// silver_batch -- the one true materialized view. Single source
+// (bronze_batch_event), no join, so none of the streaming-ingestion or
+// multi-source restrictions apply. StartTime/EndTime come straight from
+// the Started/Completed lifecycle events -- no inference from readings.
+// ---------------------------------------------------------------------
+
+.create materialized-view silver_batch on table bronze_batch_event
+{
+    bronze_batch_event
+    | summarize
+        LineId = take_any(LineId),
+        RecipeId = take_any(RecipeId),
+        StartTime = minif(Timestamp, EventType == 'Started'),
+        EndTime = maxif(Timestamp, EventType == 'Completed')
+      by BatchId
+    | extend Status = iff(isnotempty(EndTime), 'Completed', 'InProgress')
+}

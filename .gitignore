@@ -1,0 +1,6 @@
+# Vendored reference accelerators -- each is its own upstream git repo,
+# cloned for reference/comparison, not part of this repo's own history.
+# See demo/README.md.
+sources/
+
+.DS_Store

@@ -1,0 +1,27 @@
+[project]
+name = "chocolate-factory-data-generation"
+version = "0.1.0"
+description = "Streams simulated chocolate factory production-line telemetry to Azure Event Hub"
+requires-python = ">=3.11"
+dependencies = [
+    "azure-eventhub>=5.11",
+    "azure-identity>=1.15",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.8",
+]
+
+[tool.ruff]
+line-length = 88
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = [
+    "E501",  # line length -- long docstrings/comments read better unwrapped
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["entities", "event_hub_service", "seed_data", "simulator", "stage_catalog"]

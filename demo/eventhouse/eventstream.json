@@ -1,0 +1,294 @@
+{
+  "sources": [
+    {
+      "name": "ChocolateFactoryEventHub",
+      "type": "AzureEventHub",
+      "properties": {
+        "dataConnectionId": "<EVENT_HUB_CONNECTION_ID>",
+        "consumerGroupName": "$Default",
+        "inputSerialization": {
+          "type": "Json",
+          "properties": {
+            "encoding": "UTF8"
+          }
+        }
+      }
+    }
+  ],
+  "streams": [
+    {
+      "name": "chocolate-factory-stream",
+      "type": "DefaultStream",
+      "properties": {},
+      "inputNodes": [
+        {
+          "name": "ChocolateFactoryEventHub"
+        }
+      ]
+    }
+  ],
+  "operators": [
+    {
+      "name": "FilterSensorReading",
+      "type": "Filter",
+      "inputNodes": [
+        {
+          "name": "chocolate-factory-stream"
+        }
+      ],
+      "properties": {
+        "conditions": [
+          {
+            "column": {
+              "node": null,
+              "columnName": "RecordType",
+              "columnPath": null,
+              "expressionType": "ColumnReference"
+            },
+            "operatorType": "Equals",
+            "value": {
+              "dataType": "Nvarchar(max)",
+              "value": "sensor_reading",
+              "expressionType": "Literal"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "FilterQualityCheck",
+      "type": "Filter",
+      "inputNodes": [
+        {
+          "name": "chocolate-factory-stream"
+        }
+      ],
+      "properties": {
+        "conditions": [
+          {
+            "column": {
+              "node": null,
+              "columnName": "RecordType",
+              "columnPath": null,
+              "expressionType": "ColumnReference"
+            },
+            "operatorType": "Equals",
+            "value": {
+              "dataType": "Nvarchar(max)",
+              "value": "quality_check",
+              "expressionType": "Literal"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "FilterBatchEvent",
+      "type": "Filter",
+      "inputNodes": [
+        {
+          "name": "chocolate-factory-stream"
+        }
+      ],
+      "properties": {
+        "conditions": [
+          {
+            "column": {
+              "node": null,
+              "columnName": "RecordType",
+              "columnPath": null,
+              "expressionType": "ColumnReference"
+            },
+            "operatorType": "Equals",
+            "value": {
+              "dataType": "Nvarchar(max)",
+              "value": "batch_event",
+              "expressionType": "Literal"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "FilterLineStatus",
+      "type": "Filter",
+      "inputNodes": [
+        {
+          "name": "chocolate-factory-stream"
+        }
+      ],
+      "properties": {
+        "conditions": [
+          {
+            "column": {
+              "node": null,
+              "columnName": "RecordType",
+              "columnPath": null,
+              "expressionType": "ColumnReference"
+            },
+            "operatorType": "Equals",
+            "value": {
+              "dataType": "Nvarchar(max)",
+              "value": "line_status",
+              "expressionType": "Literal"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "destinations": [
+    {
+      "name": "BronzeSensorReadingDestination",
+      "type": "Eventhouse",
+      "properties": {
+        "dataIngestionMode": "ProcessedIngestion",
+        "workspaceId": "<WORKSPACE_ID>",
+        "itemId": "<EVENTHOUSE_ITEM_ID>",
+        "databaseName": "<KQL_DATABASE_NAME>",
+        "tableName": "bronze_sensor_reading",
+        "inputSerialization": {
+          "type": "Json",
+          "properties": {
+            "encoding": "UTF8"
+          }
+        }
+      },
+      "inputNodes": [
+        {
+          "name": "FilterSensorReading"
+        }
+      ],
+      "inputSchemas": [
+        {
+          "name": "FilterSensorReading",
+          "schema": {
+            "columns": [
+              { "name": "ReadingId", "type": "Nvarchar(max)", "fields": null, "items": null },
+              { "name": "LineId", "type": "Nvarchar(max)", "fields": null, "items": null },
+              { "name": "StageId", "type": "Nvarchar(max)", "fields": null, "items": null },
+              { "name": "BatchId", "type": "Nvarchar(max)", "fields": null, "items": null },
+              { "name": "Timestamp", "type": "Nvarchar(max)", "fields": null, "items": null },
+              { "name": "Metric", "type": "Nvarchar(max)", "fields": null, "items": null },
+              { "name": "Value", "type": "Float", "fields": null, "items": null },
+              { "name": "Unit", "type": "Nvarchar(max)", "fields": null, "items": null }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "BronzeQualityCheckDestination",
+      "type": "Eventhouse",
+      "properties": {
+        "dataIngestionMode": "ProcessedIngestion",
+        "workspaceId": "<WORKSPACE_ID>",
+        "itemId": "<EVENTHOUSE_ITEM_ID>",
+        "databaseName": "<KQL_DATABASE_NAME>",
+        "tableName": "bronze_quality_check",
+        "inputSerialization": {
+          "type": "Json",
+          "properties": {
+            "encoding": "UTF8"
+          }
+        }
+      },
+      "inputNodes": [
+        {
+          "name": "FilterQualityCheck"
+        }
+      ],
+      "inputSchemas": [
+        {
+          "name": "FilterQualityCheck",
+          "schema": {
+            "columns": [
+              { "name": "CheckId", "type": "Nvarchar(max)", "fields": null, "items": null },
+              { "name": "BatchId", "type": "Nvarchar(max)", "fields": null, "items": null },
+              { "name": "LineId", "type": "Nvarchar(max)", "fields": null, "items": null },
+              { "name": "StageId", "type": "Nvarchar(max)", "fields": null, "items": null },
+              { "name": "Timestamp", "type": "Nvarchar(max)", "fields": null, "items": null },
+              { "name": "DefectRate", "type": "Float", "fields": null, "items": null },
+              { "name": "Result", "type": "Nvarchar(max)", "fields": null, "items": null },
+              { "name": "Notes", "type": "Nvarchar(max)", "fields": null, "items": null }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "BronzeBatchEventDestination",
+      "type": "Eventhouse",
+      "properties": {
+        "dataIngestionMode": "ProcessedIngestion",
+        "workspaceId": "<WORKSPACE_ID>",
+        "itemId": "<EVENTHOUSE_ITEM_ID>",
+        "databaseName": "<KQL_DATABASE_NAME>",
+        "tableName": "bronze_batch_event",
+        "inputSerialization": {
+          "type": "Json",
+          "properties": {
+            "encoding": "UTF8"
+          }
+        }
+      },
+      "inputNodes": [
+        {
+          "name": "FilterBatchEvent"
+        }
+      ],
+      "inputSchemas": [
+        {
+          "name": "FilterBatchEvent",
+          "schema": {
+            "columns": [
+              { "name": "EventId", "type": "Nvarchar(max)", "fields": null, "items": null },
+              { "name": "BatchId", "type": "Nvarchar(max)", "fields": null, "items": null },
+              { "name": "LineId", "type": "Nvarchar(max)", "fields": null, "items": null },
+              { "name": "RecipeId", "type": "Nvarchar(max)", "fields": null, "items": null },
+              { "name": "EventType", "type": "Nvarchar(max)", "fields": null, "items": null },
+              { "name": "Timestamp", "type": "Nvarchar(max)", "fields": null, "items": null }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "BronzeLineStatusDestination",
+      "type": "Eventhouse",
+      "properties": {
+        "dataIngestionMode": "ProcessedIngestion",
+        "workspaceId": "<WORKSPACE_ID>",
+        "itemId": "<EVENTHOUSE_ITEM_ID>",
+        "databaseName": "<KQL_DATABASE_NAME>",
+        "tableName": "bronze_line_status",
+        "inputSerialization": {
+          "type": "Json",
+          "properties": {
+            "encoding": "UTF8"
+          }
+        }
+      },
+      "inputNodes": [
+        {
+          "name": "FilterLineStatus"
+        }
+      ],
+      "inputSchemas": [
+        {
+          "name": "FilterLineStatus",
+          "schema": {
+            "columns": [
+              { "name": "EventId", "type": "Nvarchar(max)", "fields": null, "items": null },
+              { "name": "LineId", "type": "Nvarchar(max)", "fields": null, "items": null },
+              { "name": "Status", "type": "Nvarchar(max)", "fields": null, "items": null },
+              { "name": "Reason", "type": "Nvarchar(max)", "fields": null, "items": null },
+              { "name": "Timestamp", "type": "Nvarchar(max)", "fields": null, "items": null }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "compatibilityLevel": "1.1"
+}
