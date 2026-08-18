@@ -56,6 +56,7 @@
     | lookup kind=leftouter ref_factory on FactoryId
     | project-rename FactoryCode = Code
     | join kind=leftouter qc on BatchId
+    | extend Status = iff(isnotempty(EndTime), 'Completed', 'InProgress')
     | extend CycleTimeMinutes = datetime_diff('minute', EndTime, StartTime)
     | project BatchId, LineId, LineName, FactoryId, FactoryCode, RecipeId,
               StartTime, EndTime, Status, CycleTimeMinutes,
@@ -92,7 +93,11 @@
     downtime
     | join kind=fullouter performance on FactoryCode, Day
     | join kind=fullouter quality on FactoryCode, Day
-    | extend Availability = 1.0 - (coalesce(TotalDownMinutes, 0.0) / 1440.0)
+    // TotalDownMinutes is long (datetime_diff/sum) -- coalesce requires
+    // matching branch types, hence the explicit toreal() against the 0.0
+    // default (verified against a live tenant: "case: return types are
+    // not compatible" otherwise).
+    | extend Availability = 1.0 - (coalesce(toreal(TotalDownMinutes), 0.0) / 1440.0)
     | extend OEE = Availability * coalesce(Performance, 1.0) * coalesce(Quality, 1.0)
     | project Day, FactoryCode, Availability, Performance, Quality, OEE
 }

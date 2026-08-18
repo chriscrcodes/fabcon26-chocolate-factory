@@ -28,32 +28,17 @@ Run against a KQL queryset in the target Eventhouse database, in order:
    `line_status`), and one `Eventhouse` destination per Bronze table.
    Column lists in each destination's `inputSchema` match the Bronze
    table schemas and the generator's payload fields exactly (verified
-   programmatically — see below).
+   programmatically — see below). `../infra`'s `fabric.tf` creates this
+   item automatically (Fabric Connection + Eventstream), filling in its
+   placeholders itself — see there for the manual-deploy fallback if
+   Terraform isn't being used.
 
-### Deploying `eventstream.json`
-
-Fill in the placeholders before creating the item:
-
-- `<EVENT_HUB_CONNECTION_ID>` — the Fabric **Connection** resource
-  pointing at the Event Hub namespace (Workspace settings → Manage
-  connections and gateways → create one for the namespace if it doesn't
-  exist yet).
-- `<WORKSPACE_ID>` — the target workspace's GUID (from its URL).
-- `<KQL_DATABASE_ITEM_ID>` — the KQL database item's own GUID (its
-  Settings, or its URL) -- **not** the parent Eventhouse's GUID; the
-  Eventstream destination's `itemId` must resolve directly to a
-  queryable database, and passing the Eventhouse's ID instead fails
-  with "Unable to extract cluster URL from the Eventhouse KQL database
-  item ID ..." (verified against a live tenant).
-- `<KQL_DATABASE_NAME>` — the KQL database name inside that Eventhouse
-  (the one `01`–`03` were run against).
-
-Then either import via the Fabric UI (New item → Eventstream → Edit as
-JSON / paste this definition) or create it via the
-[Eventstream REST API](https://learn.microsoft.com/en-us/fabric/real-time-intelligence/event-streams/eventstream-rest-api)
-with this file as the `eventstream.json` definition part. Once live,
-start `demo/data-generation/run_simulator.py` and events should start
-landing in the four Bronze tables.
+Once the Eventstream is live, `demo/ontology/tables/*.csv` (written by
+`demo/data-generation/run_seed_data.py`) needs loading into the four
+`ref_*` tables once — `.ingest inline into table ref_factory <| ...` per
+table works for local/dev use; a real deployment should use a Fabric
+pipeline Copy activity instead (see `01`'s comment). Without this, Silver
+enrichment columns (`LineName`, `FactoryCode`, ...) stay blank.
 
 The `Filter` operator shape here (`operatorType`/`ColumnReference`/
 `Literal`) is taken directly from Microsoft's own
@@ -62,30 +47,47 @@ template repo (`API Templates/eventstream-definition.json`), not
 reverse-engineered — this is the one part of the whole pipeline checked
 against a real reference example rather than docs prose alone.
 
-## What's not verified yet
+## Verified against a live tenant
 
-This KQL was written against the documented syntax (Kusto Learn docs,
-cross-checked in the design memo's Reality check section) but **has not
-been run against a live Eventhouse** — there's no Kusto engine in this
-environment to test against. Before a real run, check these first, in
-rough order of risk:
+`01`–`03` have been run end to end against a real Fabric Eventhouse, with
+the simulator actually streaming through Event Hub → Eventstream →
+Bronze → Silver → Gold. Four issues only surfaced this way, all fixed in
+the KQL here:
 
-- **`evaluate pivot(Metric, take_any(Value))`** in the 6 stage transforms
-  — the pivot plugin's exact column-inference behavior is the least
-  battle-tested part of this file. If it doesn't group by
-  `LineId, StageId, BatchId, Timestamp` as intended, each metric may land
-  in its own row instead of pivoting into columns.
-- **`prev()` after `serialize`** in `gold_factory_oee_daily()` — the
-  Down/Running pairing logic. Verify the window actually resets correctly
-  per `LineId` (the `LineId == PrevLineId` guard should handle the
-  boundary, but this is exactly the kind of thing to check against real
-  data first).
-- **Join column suffixing** in the Gold functions — Kusto renames
-  colliding non-key columns from the right side of a `join` with a `1`
-  suffix. `gold_line_throughput_hourly()`'s `LineName` should survive
-  unambiguously since it's identical on both sides, but worth a quick
-  eyeball on first run.
-- Everything else (table/function creation, update policy wiring,
-  `silver_batch`'s materialized view) follows patterns lifted close to
-  verbatim from the official examples in the Kusto docs, so it's lower
-  risk.
+- **Bronze `Timestamp` is `string`, not `datetime`.** Eventstream's
+  `ProcessedIngestion` auto-creates the Bronze tables from
+  `eventstream.json`'s `inputSchema`, which types `Timestamp` as
+  `Nvarchar(max)` (JSON has no native datetime) — and since `.create
+  table` is a no-op against an already-existing table regardless of
+  schema mismatches, `01`'s original `Timestamp: datetime` declaration
+  silently never took effect. `01` now declares `Timestamp: string` to
+  match reality, and every Silver transform casts with `todatetime(...)`.
+- **`evaluate pivot()` can silently drop columns.** Update policies
+  process one small ingestion batch/extent at a time; if a batch happens
+  to carry zero rows for a given stage, `pivot()` produces no columns for
+  that stage's metrics at all, and a plain `project Timestamp, ...,
+  TemperatureC, ...` then fails to resolve the column — which, since
+  these are `IsTransactional` policies, rolls back the *entire* ingestion
+  batch and silently blocks Bronze itself from growing (visible via
+  `.show ingestion failures`, not from the `.alter table policy update`
+  command succeeding). Fixed by wrapping every pivoted metric column in
+  `column_ifexists('X', real(null))` in the final `project` of each of
+  the 6 stage transforms.
+- **Materialized views only allow a table reference + one trailing
+  `summarize`.** `silver_batch`'s original `| extend Status = ...` after
+  the `summarize` was rejected outright; folding it into the `summarize`
+  as an aggregation didn't work either (`iff` isn't a supported
+  aggregation function for materialized views). Fixed by dropping
+  `Status` from `silver_batch` entirely and deriving it downstream in
+  `gold_batch_summary()` instead (a function, not an MV, so no such
+  restriction).
+- **`coalesce` needs matching branch types.** `gold_factory_oee_daily()`'s
+  `coalesce(TotalDownMinutes, 0.0)` mixed `long` (from
+  `datetime_diff`/`sum`) with `real` (`0.0`) — fixed with an explicit
+  `toreal(TotalDownMinutes)`.
+
+Two things this pass didn't verify: `gold_factory_oee_daily()`'s
+`prev()`/`serialize` Down/Running pairing logic on a realistic multi-day
+window (only tested against a few minutes of live data), and Gold
+functions' behavior once `join` columns actually collide across Silver
+tables at scale.

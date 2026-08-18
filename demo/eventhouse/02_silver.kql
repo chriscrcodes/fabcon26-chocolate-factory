@@ -19,6 +19,16 @@
 // Per-stage pivot tables (Factory Processing + Finishing, 6 total)
 // Each one: filter bronze_sensor_reading to its StageId, pivot
 // Metric/Value into named columns, enrich with line + factory.
+//
+// column_ifexists() wraps every pivoted metric column: update policies
+// process one small ingestion batch/extent at a time, and if that batch
+// happens to carry zero rows for a given stage, evaluate pivot() simply
+// doesn't produce that stage's metric columns at all -- a plain
+// `project Timestamp, ..., TemperatureC, ...` then fails with "Failed to
+// resolve scalar expression named 'TemperatureC'", which (since these
+// are IsTransactional policies) rolls back the *entire* ingestion batch,
+// silently blocking Bronze itself from growing. Verified against a live
+// tenant via `.show ingestion failures`.
 // ---------------------------------------------------------------------
 
 .create table silver_grinding (
@@ -29,11 +39,13 @@
 .create-or-alter function SilverGrindingTransform() {
     bronze_sensor_reading
     | where StageId == 'grinding'
-    | project LineId, StageId, BatchId, Timestamp, Metric, Value
+    | project LineId, StageId, BatchId, Timestamp = todatetime(Timestamp), Metric, Value
     | evaluate pivot(Metric, take_any(Value))
     | invoke EnrichLine()
     | project Timestamp, LineId, LineName, FactoryId, FactoryCode, StageId, BatchId,
-              ParticleSizeMicron, MotorTemperatureC, ThroughputKgPerHr
+              ParticleSizeMicron = column_ifexists('ParticleSizeMicron', real(null)),
+              MotorTemperatureC = column_ifexists('MotorTemperatureC', real(null)),
+              ThroughputKgPerHr = column_ifexists('ThroughputKgPerHr', real(null))
 }
 .alter table silver_grinding policy update
 @'[{"IsEnabled":true,"Source":"bronze_sensor_reading","Query":"SilverGrindingTransform()","IsTransactional":true,"PropagateIngestionProperties":false}]'
@@ -46,11 +58,13 @@
 .create-or-alter function SilverMixingRefiningTransform() {
     bronze_sensor_reading
     | where StageId == 'mixing_refining'
-    | project LineId, StageId, BatchId, Timestamp, Metric, Value
+    | project LineId, StageId, BatchId, Timestamp = todatetime(Timestamp), Metric, Value
     | evaluate pivot(Metric, take_any(Value))
     | invoke EnrichLine()
     | project Timestamp, LineId, LineName, FactoryId, FactoryCode, StageId, BatchId,
-              ParticleSizeMicron, RollerTemperatureC, ViscosityPaS
+              ParticleSizeMicron = column_ifexists('ParticleSizeMicron', real(null)),
+              RollerTemperatureC = column_ifexists('RollerTemperatureC', real(null)),
+              ViscosityPaS = column_ifexists('ViscosityPaS', real(null))
 }
 .alter table silver_mixing_refining policy update
 @'[{"IsEnabled":true,"Source":"bronze_sensor_reading","Query":"SilverMixingRefiningTransform()","IsTransactional":true,"PropagateIngestionProperties":false}]'
@@ -63,11 +77,13 @@
 .create-or-alter function SilverConchingTransform() {
     bronze_sensor_reading
     | where StageId == 'conching'
-    | project LineId, StageId, BatchId, Timestamp, Metric, Value
+    | project LineId, StageId, BatchId, Timestamp = todatetime(Timestamp), Metric, Value
     | evaluate pivot(Metric, take_any(Value))
     | invoke EnrichLine()
     | project Timestamp, LineId, LineName, FactoryId, FactoryCode, StageId, BatchId,
-              TemperatureC, MoisturePercent, AcidityPH
+              TemperatureC = column_ifexists('TemperatureC', real(null)),
+              MoisturePercent = column_ifexists('MoisturePercent', real(null)),
+              AcidityPH = column_ifexists('AcidityPH', real(null))
 }
 .alter table silver_conching policy update
 @'[{"IsEnabled":true,"Source":"bronze_sensor_reading","Query":"SilverConchingTransform()","IsTransactional":true,"PropagateIngestionProperties":false}]'
@@ -80,11 +96,13 @@
 .create-or-alter function SilverTemperingTransform() {
     bronze_sensor_reading
     | where StageId == 'tempering'
-    | project LineId, StageId, BatchId, Timestamp, Metric, Value
+    | project LineId, StageId, BatchId, Timestamp = todatetime(Timestamp), Metric, Value
     | evaluate pivot(Metric, take_any(Value))
     | invoke EnrichLine()
     | project Timestamp, LineId, LineName, FactoryId, FactoryCode, StageId, BatchId,
-              TemperatureC, CrystalFormIndex, ViscosityPaS
+              TemperatureC = column_ifexists('TemperatureC', real(null)),
+              CrystalFormIndex = column_ifexists('CrystalFormIndex', real(null)),
+              ViscosityPaS = column_ifexists('ViscosityPaS', real(null))
 }
 .alter table silver_tempering policy update
 @'[{"IsEnabled":true,"Source":"bronze_sensor_reading","Query":"SilverTemperingTransform()","IsTransactional":true,"PropagateIngestionProperties":false}]'
@@ -97,11 +115,13 @@
 .create-or-alter function SilverMoldingCoolingTransform() {
     bronze_sensor_reading
     | where StageId == 'molding_cooling'
-    | project LineId, StageId, BatchId, Timestamp, Metric, Value
+    | project LineId, StageId, BatchId, Timestamp = todatetime(Timestamp), Metric, Value
     | evaluate pivot(Metric, take_any(Value))
     | invoke EnrichLine()
     | project Timestamp, LineId, LineName, FactoryId, FactoryCode, StageId, BatchId,
-              MoldTemperatureC, TunnelTemperatureC, VibrationHz
+              MoldTemperatureC = column_ifexists('MoldTemperatureC', real(null)),
+              TunnelTemperatureC = column_ifexists('TunnelTemperatureC', real(null)),
+              VibrationHz = column_ifexists('VibrationHz', real(null))
 }
 .alter table silver_molding_cooling policy update
 @'[{"IsEnabled":true,"Source":"bronze_sensor_reading","Query":"SilverMoldingCoolingTransform()","IsTransactional":true,"PropagateIngestionProperties":false}]'
@@ -114,11 +134,13 @@
 .create-or-alter function SilverPackagingTransform() {
     bronze_sensor_reading
     | where StageId == 'packaging'
-    | project LineId, StageId, BatchId, Timestamp, Metric, Value
+    | project LineId, StageId, BatchId, Timestamp = todatetime(Timestamp), Metric, Value
     | evaluate pivot(Metric, take_any(Value))
     | invoke EnrichLine()
     | project Timestamp, LineId, LineName, FactoryId, FactoryCode, StageId, BatchId,
-              LineSpeedUnitsPerMin, SealTemperatureC, RejectRatePercent
+              LineSpeedUnitsPerMin = column_ifexists('LineSpeedUnitsPerMin', real(null)),
+              SealTemperatureC = column_ifexists('SealTemperatureC', real(null)),
+              RejectRatePercent = column_ifexists('RejectRatePercent', real(null))
 }
 .alter table silver_packaging policy update
 @'[{"IsEnabled":true,"Source":"bronze_sensor_reading","Query":"SilverPackagingTransform()","IsTransactional":true,"PropagateIngestionProperties":false}]'
@@ -135,6 +157,7 @@
 )
 .create-or-alter function SilverQualityCheckTransform() {
     bronze_quality_check
+    | extend Timestamp = todatetime(Timestamp)
     | invoke EnrichLine()
     | lookup kind=leftouter ref_production_stage on StageId
     | project-rename StageName = Name
@@ -155,6 +178,7 @@
 )
 .create-or-alter function SilverLineStatusTransform() {
     bronze_line_status
+    | extend Timestamp = todatetime(Timestamp)
     | invoke EnrichLine()
     | project Timestamp, EventId, LineId, LineName, FactoryId, FactoryCode, Status, Reason
 }
@@ -166,6 +190,13 @@
 // (bronze_batch_event), no join, so none of the streaming-ingestion or
 // multi-source restrictions apply. StartTime/EndTime come straight from
 // the Started/Completed lifecycle events -- no inference from readings.
+//
+// Status isn't computed here -- a materialized view's query can only be
+// a table reference plus a single summarize operator, and only specific
+// aggregation functions are allowed inside it (`iff` isn't one, even as
+// an aggregation expression, verified against a live tenant). Consumers
+// derive Status from EndTime instead (see gold_batch_summary in
+// 03_gold.kql).
 // ---------------------------------------------------------------------
 
 .create materialized-view silver_batch on table bronze_batch_event
@@ -174,8 +205,7 @@
     | summarize
         LineId = take_any(LineId),
         RecipeId = take_any(RecipeId),
-        StartTime = minif(Timestamp, EventType == 'Started'),
-        EndTime = maxif(Timestamp, EventType == 'Completed')
+        StartTime = minif(todatetime(Timestamp), EventType == 'Started'),
+        EndTime = maxif(todatetime(Timestamp), EventType == 'Completed')
       by BatchId
-    | extend Status = iff(isnotempty(EndTime), 'Completed', 'InProgress')
 }

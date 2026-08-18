@@ -17,12 +17,20 @@
 // Bronze
 // ---------------------------------------------------------------------
 
+// Timestamp is string, not datetime -- Eventstream's ProcessedIngestion
+// auto-creates these tables from eventstream.json's inputSchema (which
+// declares Timestamp as Nvarchar(max), since JSON has no native datetime
+// type), and .create table is a no-op against an already-existing table
+// regardless of type mismatches -- so this DDL is written to match what's
+// actually live rather than what would be ingested if the table were
+// created fresh from this file alone. Silver casts with todatetime().
+
 .create table bronze_sensor_reading (
     ReadingId: string,
     LineId: string,
     StageId: string,
     BatchId: string,
-    Timestamp: datetime,
+    Timestamp: string,
     Metric: string,
     Value: real,
     Unit: string
@@ -33,7 +41,7 @@
     BatchId: string,
     LineId: string,
     StageId: string,
-    Timestamp: datetime,
+    Timestamp: string,
     DefectRate: real,
     Result: string,
     Notes: string
@@ -45,7 +53,7 @@
     LineId: string,
     RecipeId: string,
     EventType: string,   // 'Started' | 'Completed'
-    Timestamp: datetime
+    Timestamp: string
 )
 
 .create table bronze_line_status (
@@ -53,7 +61,7 @@
     LineId: string,
     Status: string,   // 'Running' | 'Down'
     Reason: string,
-    Timestamp: datetime
+    Timestamp: string
 )
 
 // Every Silver update policy below that joins in dimension data needs its

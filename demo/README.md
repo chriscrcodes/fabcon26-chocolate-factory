@@ -18,9 +18,10 @@ we don't edit them in place).
   raw ingestion tables, per-stage Silver pivots + dimension joins, and
   Gold rollups (one materialized view, three functions — see the
   medallion-layers design memo for why), plus `eventstream.json` routing
-  the generator's four `RecordType`s into the four Bronze tables. Not yet
-  run against a live Eventhouse; see `eventhouse/README.md` for what to
-  verify first.
+  the generator's four `RecordType`s into the four Bronze tables. Deployed
+  and verified end to end against a live Eventhouse — see
+  `eventhouse/README.md`'s "Verified against a live tenant" section for
+  the issues that surfaced only from a real run and how they were fixed.
 - `agents/` — not started. Coordinator + domain-specialist (Factory/Quality,
   Supply Chain, ERP/Orders) instructions and orchestration config for
   Microsoft Foundry.
@@ -32,14 +33,10 @@ we don't edit them in place).
   domain. Deploys alongside `ontology/` into `fabric-ontology`'s
   document indexing.
 - [`infra/`](infra) — one Terraform state for both Azure (Event Hub) and
-  Fabric (workspace, Eventhouse, KQL Database, Eventstream). Supports
-  either a Fabric trial tenant (reference an existing workspace — trial
-  capacities aren't supported by the provider) or a real Azure-provisioned
-  capacity (create a new workspace, optionally with workspace identity).
-  `terraform validate`/`plan` pass against both paths, not yet applied.
-  README covers the full Fabric IaC landscape researched, and exactly
-  which parts were deliberately left manual (the Event Hub connection
-  itself, and running `eventhouse/01`–`03`'s KQL).
+  Fabric (capacity, workspace, Eventhouse, KQL Database, Connection,
+  Eventstream). Provisions a real Azure Fabric capacity (F2 by default)
+  rather than assuming one exists. Deployed and verified against a real
+  tenant — see `infra/README.md`.
 
 Nine production stages in three phases (Farm Preparation / Factory
 Processing / Finishing) — Farm Preparation happens off-site near cocoa
