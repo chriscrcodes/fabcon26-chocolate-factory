@@ -1,19 +1,120 @@
-# Fabric workspace + items for the chocolate factory demo. Container
-# resources only (workspace, Eventhouse, KQL Database, Eventstream) --
-# the actual Bronze/Silver/Gold KQL (demo/eventhouse/01-03) stays a manual
-# step. fabric_kql_database's `definition` attribute takes a
+# Fabric side of the demo: the capacity itself, a dedicated workspace on
+# it, and the workspace items (Eventhouse, KQL Database, Connection,
+# Eventstream). fabric_kql_database's `definition` attribute takes a
 # DatabaseSchema.kql-shaped bundle, and whether that format tolerates
 # things like `.alter table policy streamingingestion` and
 # `.create materialized-view` wasn't something this pass could verify
 # against a live Fabric tenant -- safer to keep that step explicit than
-# guess.
+# guess, so the Bronze/Silver/Gold KQL (demo/eventhouse/01-03) stays a
+# manual step run against the database created below.
+
+variable "skip_capacity_state_validation" {
+  description = <<-EOT
+    Skip verifying the workspace's capacity is Active. Defaults to true --
+    covers the timing gap between the capacity being accepted by ARM
+    (below) and it becoming visible/Active through Fabric's own
+    capacity-listing API, and is also needed for anyone whose principal
+    lacks capacity-listing permission on a shared capacity.
+  EOT
+  type        = bool
+  default     = true
+}
+
+variable "new_workspace_display_name" {
+  description = "Display name of the Fabric workspace created on the capacity."
+  type        = string
+  default     = "Chocolate Factory"
+}
+
+variable "fabric_capacity_sku" {
+  description = "Microsoft.Fabric/capacities SKU."
+  type        = string
+  default     = "F2"
+
+  validation {
+    condition     = contains(["F2", "F4", "F8", "F16", "F32", "F64", "F128", "F256", "F512", "F1024", "F2048"], var.fabric_capacity_sku)
+    error_message = "fabric_capacity_sku must be one of the Fabric F-SKUs (F2-F2048)."
+  }
+}
+
+variable "fabric_capacity_admin_members" {
+  description = "Azure AD UPNs or object IDs granted Fabric capacity admin on the new capacity. At least one is required by Azure."
+  type        = list(string)
+
+  validation {
+    condition     = length(var.fabric_capacity_admin_members) > 0
+    error_message = "fabric_capacity_admin_members must contain at least one UPN or object ID."
+  }
+}
+
+variable "fabric_capacity_name" {
+  description = "Name of the Microsoft.Fabric/capacities resource. Defaults to a deterministic name derived from name_prefix and the resource group, same pattern as azure.tf's event_hub_namespace_name."
+  type        = string
+  default     = ""
+}
+
+variable "enable_workspace_identity" {
+  description = <<-EOT
+    Sets identity = SystemAssigned on the new workspace, so its
+    service_principal_id can feed workspace_identity_principal_id
+    (azure.tf) for the Event Hub Data Receiver role, closing the loop
+    documented in README.
+  EOT
+  type        = bool
+  default     = false
+}
 
 # ---------------------------------------------------------------------
-# Capacity -- provisioned by capacity.tf (azapi); looked up here by
-# display_name since that's the value we control directly, rather than
-# guessing at how the Fabric-side capacity ID maps to the ARM resource ID.
+# Capacity -- the one piece of the Fabric side that IS a real ARM
+# resource (Microsoft.Fabric/capacities), so it's provisioned via azapi
+# rather than the microsoft/fabric provider (which can only look it up,
+# via data.fabric_capacity below).
 # ---------------------------------------------------------------------
 
+locals {
+  # local.suffix comes from azure.tf -- reused here so the capacity name
+  # stays deterministic and unique per RG/prefix without a stored
+  # random_id resource, same reasoning as event_hub_namespace_name.
+  fabric_capacity_name = var.fabric_capacity_name != "" ? var.fabric_capacity_name : "fab${var.name_prefix}${local.suffix}"
+}
+
+resource "azapi_resource" "fabric_capacity" {
+  type      = "Microsoft.Fabric/capacities@2023-11-01"
+  name      = local.fabric_capacity_name
+  parent_id = data.azurerm_resource_group.this.id
+  location  = var.location
+
+  body = {
+    sku = {
+      name = var.fabric_capacity_sku
+      tier = "Fabric"
+    }
+    properties = {
+      administration = {
+        members = var.fabric_capacity_admin_members
+      }
+    }
+  }
+
+  response_export_values = ["properties.state"]
+
+  tags = var.tags
+}
+
+# ARM accepting the capacity doesn't guarantee it's immediately visible
+# through Fabric's own capacity-listing API -- which is what
+# data.fabric_capacity's "state == Active" postcondition (below) checks.
+# This gap wasn't measurable against a live tenant during this pass; if
+# `terraform apply` fails on that postcondition, re-running after a short
+# wait (or raising create_duration below) is the fix.
+resource "time_sleep" "capacity_ready" {
+  depends_on      = [azapi_resource.fabric_capacity]
+  create_duration = "60s"
+}
+
+# Looked up here by display_name since that's the value we control
+# directly, rather than guessing at how the Fabric-side capacity ID maps
+# to the ARM resource ID.
 data "fabric_capacity" "this" {
   display_name = azapi_resource.fabric_capacity.name
 
@@ -43,9 +144,9 @@ resource "fabric_workspace" "this" {
 locals {
   workspace_id = fabric_workspace.this.id
 
-  # Feeds workspace_identity_principal_id (main.tf / variables.tf) so the
-  # Event Hub Data Receiver role assignment can be wired up automatically
-  # when workspace identity is enabled.
+  # Feeds workspace_identity_principal_id (azure.tf) so the Event Hub
+  # Data Receiver role assignment can be wired up automatically when
+  # workspace identity is enabled.
   workspace_identity_service_principal_id = try(fabric_workspace.this.identity.service_principal_id, "")
 }
 
@@ -70,7 +171,7 @@ resource "fabric_kql_database" "this" {
 
 # ---------------------------------------------------------------------
 # Connection -- the "cloud connection" from Fabric to the Event Hub
-# created in evh.tf. type/creationMethod ("EventHub"/"EventHub.Contents")
+# created in azure.tf. type/creationMethod ("EventHub"/"EventHub.Contents")
 # and their required parameters (endpoint, entityPath) come from a live
 # call to the Fabric ListSupportedConnectionTypes API
 # (https://learn.microsoft.com/en-us/rest/api/fabric/core/connections/list-supported-connection-types)
@@ -80,12 +181,12 @@ resource "fabric_kql_database" "this" {
 # (username = SAS policy name, password = SAS key) per
 # https://learn.microsoft.com/en-us/fabric/real-time-intelligence/get-data-event-hub.
 #
-# Two modes, matching evh.tf's local.use_workspace_identity:
+# Two modes, matching azure.tf's local.use_workspace_identity:
 #   - workspace identity (enable_workspace_identity = true): the
 #     workspace authenticates as itself, already granted Data Receiver
-#     in evh.tf.
+#     in azure.tf.
 #   - default: Basic credentials using the listen-only SAS rule from
-#     evh.tf (azurerm_eventhub_authorization_rule.eventstream_listen).
+#     azure.tf (azurerm_eventhub_authorization_rule.eventstream_listen).
 # ---------------------------------------------------------------------
 
 resource "fabric_connection" "event_hub" {
@@ -164,4 +265,44 @@ resource "fabric_eventstream" "this" {
       ]
     }
   }
+}
+
+output "FABRIC_CAPACITY_ID" {
+  description = "Microsoft.Fabric/capacities ARM resource ID."
+  value       = azapi_resource.fabric_capacity.id
+}
+
+output "FABRIC_WORKSPACE_ID" {
+  description = "Fabric workspace ID -- <WORKSPACE_ID> in demo/eventhouse/eventstream.json"
+  value       = local.workspace_id
+}
+
+output "FABRIC_EVENTHOUSE_ID" {
+  description = "Eventhouse item ID."
+  value       = fabric_eventhouse.this.id
+}
+
+output "FABRIC_KQL_DATABASE_NAME" {
+  description = "KQL database name -- <KQL_DATABASE_NAME> in demo/eventhouse/eventstream.json. Run demo/eventhouse/01-03 against this database."
+  value       = fabric_kql_database.this.display_name
+}
+
+output "FABRIC_KQL_DATABASE_ITEM_ID" {
+  description = "KQL database item ID -- <KQL_DATABASE_ITEM_ID> in demo/eventhouse/eventstream.json (destinations' itemId must be the database's own item, not the parent Eventhouse's)."
+  value       = fabric_kql_database.this.id
+}
+
+output "FABRIC_CONNECTION_ID" {
+  description = "Fabric Connection ID for the Event Hub cloud connection."
+  value       = fabric_connection.event_hub.id
+}
+
+output "FABRIC_EVENTSTREAM_ID" {
+  description = "Eventstream item ID."
+  value       = fabric_eventstream.this.id
+}
+
+output "FABRIC_WORKSPACE_IDENTITY_ENABLED" {
+  description = "Whether the workspace has an identity Terraform could read."
+  value       = local.workspace_identity_service_principal_id != ""
 }

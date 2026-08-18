@@ -9,30 +9,27 @@ scripted yet).
 One Terraform state (not Bicep — see "Why Terraform" below), Azure and
 Fabric together:
 
-- [`providers.tf`](providers.tf) — `azurerm` + `microsoft/fabric`
-  providers, both defaulting to Azure CLI auth (`az login`), no separate
-  setup
-- [`evh.tf`](evh.tf), [`variables.tf`](variables.tf),
-  [`outputs.tf`](outputs.tf) — Azure Event Hub Namespace + Event Hub +
-  role assignments, that `demo/data-generation` streams to and
-  `demo/eventhouse/eventstream.json` reads from
-- [`capacity.tf`](capacity.tf) — the Fabric capacity itself
-  (`Microsoft.Fabric/capacities`, F2 by default, configurable via
-  `fabric_capacity_sku`), provisioned via the `azapi` provider since
-  neither `azurerm` nor `microsoft/fabric` expose that ARM resource
-- [`fabric.tf`](fabric.tf), [`variables_fabric.tf`](variables_fabric.tf),
-  [`outputs_fabric.tf`](outputs_fabric.tf) — a dedicated Fabric workspace
-  on that capacity, Eventhouse, KQL Database, the Fabric Connection to
-  the Event Hub above, and the Eventstream item itself, built from
-  `demo/eventhouse/eventstream.json`
+- [`providers.tf`](providers.tf) — `azurerm`, `microsoft/fabric`, `azapi`,
+  and `time` providers, all defaulting to Azure CLI auth (`az login`), no
+  separate setup
+- [`azure.tf`](azure.tf) — variables, resources, and outputs for the
+  Azure Event Hub Namespace + Event Hub + role assignments, that
+  `demo/data-generation` streams to and `fabric.tf`'s Connection reads
+  from
+- [`fabric.tf`](fabric.tf) — variables, resources, and outputs for the
+  whole Fabric side: the capacity itself (`Microsoft.Fabric/capacities`,
+  F2 by default, configurable via `fabric_capacity_sku`, provisioned via
+  the `azapi` provider since neither `azurerm` nor `microsoft/fabric`
+  expose that ARM resource), a dedicated workspace on it, Eventhouse, KQL
+  Database, the Fabric Connection to the Event Hub, and the Eventstream
+  item itself, built from `demo/eventhouse/eventstream.json`
 - [`terraform.tfvars.example`](terraform.tfvars.example) — copy to
   `terraform.tfvars` and fill in the Azure/Fabric values
 
-`terraform validate` passes, and `terraform plan` was run against two
-dummy `tfvars` covering both `use_existing_workspace` paths — both
-construct the full resource graph correctly and fail only at the
-expected point (no `az login` in this environment). Not yet applied to a
-real tenant.
+Deployed and verified end to end against a real tenant: `terraform apply`
+provisions the F2 capacity, workspace, Eventhouse, KQL database,
+Connection, and Eventstream, and `demo/data-generation`'s simulator
+streams events through to the Bronze tables.
 
 Event Hub auth, chosen by whether a workspace identity is available
 (`workspace_identity_principal_id`, resolved automatically from
@@ -50,7 +47,7 @@ Event Hub auth, chosen by whether a workspace identity is available
 ### Deploy
 
 ```bash
-cp terraform.tfvars.example terraform.tfvars   # pick a Fabric setup, fill in the Azure values
+cp terraform.tfvars.example terraform.tfvars   # fill in the Azure/Fabric values
 terraform init
 terraform apply
 ```
@@ -64,7 +61,7 @@ Eventstream itself, so the only manual step left afterward is running
 
 The `microsoft/fabric` provider's own docs list a **known limitation**:
 *"Microsoft Fabric trial capacity is not supported. Only self-provisioned
-Fabric Capacity on Azure is supported."* That's why `capacity.tf`
+Fabric Capacity on Azure is supported."* That's why `fabric.tf`
 provisions a real Azure-provisioned `Microsoft.Fabric/capacities`
 resource via `azapi` (default SKU **F2**, configurable via
 `fabric_capacity_sku`) rather than assuming one already exists or
@@ -76,19 +73,19 @@ for the latter.
 "SystemAssigned" }` on it — the workspace's `service_principal_id` then
 feeds the Event Hub Data Receiver role assignment automatically
 (`fabric.tf`'s `workspace_identity_service_principal_id` local, read by
-`evh.tf`), rather than being a value you'd have to find and paste in by
+`azure.tf`), rather than being a value you'd have to find and paste in by
 hand.
 
 ### Why Terraform, not Bicep
 
 Bicep can only reach `Microsoft.Fabric/capacities` (see below) — nothing
 else on the Fabric side is an ARM resource, so a Fabric config needs
-Terraform's `microsoft/fabric` provider regardless. `capacity.tf`
+Terraform's `microsoft/fabric` provider regardless. `fabric.tf`
 provisions that one ARM resource too, via the `azapi` provider, so the
 capacity, the workspace/items, and the Event Hub all live in one
 Terraform state and one `apply`. `sources/fabric-data-generation`
 itself uses Bicep (its own `event-hub.bicep` was the reference for the
-role-assignment pattern in `evh.tf`), so if this demo ever needs to
+role-assignment pattern in `azure.tf`), so if this demo ever needs to
 match that accelerator's deployment convention exactly, reverting that
 one file to Bicep is a small, isolated change — everything else in
 `demo/` stays independent of that choice either way.
@@ -103,7 +100,7 @@ should use, rather than guessed at.
 
 Only **`Microsoft.Fabric/capacities`** (the underlying Azure capacity SKU
 purchase — F2–F2048) is a real ARM/Bicep resource — provisioned here via
-`capacity.tf`, using the `azapi` provider rather than Bicep so it stays
+`fabric.tf`, using the `azapi` provider rather than Bicep so it stays
 in the same Terraform state as everything else. Workspaces and every
 item inside one (Eventhouse, KQL Database, Eventstream, Lakehouse,
 Warehouse, SQL Database, Connections...) are **not** ARM resources — they
@@ -147,7 +144,7 @@ Confirmed resources directly relevant to this repo:
 
 Practical implication, and why the Event Hub above is Terraform too:
 `Microsoft.Fabric/capacities` has an `azurerm`-adjacent path (`azapi`,
-now `capacity.tf`) that works fine alongside `microsoft/fabric` in one
+now `fabric.tf`) that works fine alongside `microsoft/fabric` in one
 Terraform state — there's no need to split Azure and Fabric resources
 across Bicep and Terraform when Terraform alone covers both.
 
@@ -208,7 +205,7 @@ Notably there's no SAS-specific credential type — the Fabric UI's
 "Shared Access Key" auth kind (the only kind documented for the Basic
 feature level) maps to `credentialType: "Basic"`, with `username` = the
 SAS policy name and `password` = the SAS key. `fabric.tf` uses the
-listen-only SAS rule from `evh.tf`
+listen-only SAS rule from `azure.tf`
 (`azurerm_eventhub_authorization_rule.eventstream_listen`) for that, or
 `credentialType: "WorkspaceIdentity"` when `enable_workspace_identity =
 true`.
