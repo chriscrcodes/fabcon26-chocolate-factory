@@ -1,56 +1,50 @@
-# Fabric-side variables. See fabric.tf and README's "Trial capacity" note
-# before setting these -- the provider's own docs list trial capacities as
-# an explicit known limitation, which is what use_existing_workspace exists
-# to work around.
-
-variable "use_existing_workspace" {
-  description = <<-EOT
-    Reference an existing Fabric workspace instead of creating one. Set this
-    to true if you're on a Fabric trial -- the provider's own docs say trial
-    capacities aren't supported, so a workspace that already sits on one
-    can only be referenced, not created/managed through fabric_capacity.
-  EOT
-  type        = bool
-  default     = false
-}
-
-variable "existing_workspace_id" {
-  description = "Used when use_existing_workspace = true. Either this or existing_workspace_display_name -- not both."
-  type        = string
-  default     = ""
-}
-
-variable "existing_workspace_display_name" {
-  description = "Used when use_existing_workspace = true. Either this or existing_workspace_id -- not both."
-  type        = string
-  default     = ""
-}
+# Fabric-side variables. capacity.tf provisions the Fabric capacity itself
+# (Azure-provisioned only -- trial capacities are a documented, unsupported
+# limitation of the microsoft/fabric provider); fabric.tf creates a
+# dedicated workspace on it plus the Eventhouse/KQL Database/Eventstream
+# items.
 
 variable "skip_capacity_state_validation" {
   description = <<-EOT
     Skip verifying the workspace's capacity is Active. Defaults to true --
-    this is the documented workaround for trial capacities (the provider
-    can't list/validate them), and it's also needed for anyone whose
-    principal lacks capacity-listing permission on a shared capacity.
+    covers the timing gap between the capacity being accepted by ARM
+    (capacity.tf) and it becoming visible/Active through Fabric's own
+    capacity-listing API, and is also needed for anyone whose principal
+    lacks capacity-listing permission on a shared capacity.
   EOT
   type        = bool
   default     = true
 }
 
 variable "new_workspace_display_name" {
-  description = "Used when use_existing_workspace = false."
+  description = "Display name of the Fabric workspace created on the capacity."
   type        = string
   default     = "Chocolate Factory"
 }
 
-variable "capacity_id" {
-  description = "Used when use_existing_workspace = false. Either this or capacity_display_name -- not both. Must be an Azure-provisioned capacity (Microsoft.Fabric/capacities) -- trial capacities aren't supported here, see use_existing_workspace."
+variable "fabric_capacity_sku" {
+  description = "Microsoft.Fabric/capacities SKU."
   type        = string
-  default     = ""
+  default     = "F2"
+
+  validation {
+    condition     = contains(["F2", "F4", "F8", "F16", "F32", "F64", "F128", "F256", "F512", "F1024", "F2048"], var.fabric_capacity_sku)
+    error_message = "fabric_capacity_sku must be one of the Fabric F-SKUs (F2-F2048)."
+  }
 }
 
-variable "capacity_display_name" {
-  description = "Used when use_existing_workspace = false. Either this or capacity_id -- not both."
+variable "fabric_capacity_admin_members" {
+  description = "Azure AD UPNs or object IDs granted Fabric capacity admin on the new capacity. At least one is required by Azure."
+  type        = list(string)
+
+  validation {
+    condition     = length(var.fabric_capacity_admin_members) > 0
+    error_message = "fabric_capacity_admin_members must contain at least one UPN or object ID."
+  }
+}
+
+variable "fabric_capacity_name" {
+  description = "Name of the Microsoft.Fabric/capacities resource. Defaults to a deterministic name derived from name_prefix and the resource group, same pattern as evh.tf's event_hub_namespace_name."
   type        = string
   default     = ""
 }
@@ -69,18 +63,3 @@ variable "enable_workspace_identity" {
   default     = false
 }
 
-variable "existing_event_hub_connection_id" {
-  description = <<-EOT
-    ID of an existing Fabric Connection to the Event Hub, used as
-    eventstream.json's AzureEventHub source. Deliberately not created by
-    this config -- the Fabric connector's exact connection_details.type/
-    creation_method strings for Azure Event Hubs aren't documented in the
-    fabric provider's own reference docs, and guessing them risks a
-    silently-wrong connection. Create one via Fabric UI (Eventstream ->
-    Add source -> Azure Event Hubs -- see demo/eventhouse/README.md) once,
-    then paste its ID here. Leave empty to skip creating the Eventstream
-    (Eventhouse + KQL Database still get created).
-  EOT
-  type        = string
-  default     = ""
-}

@@ -56,3 +56,19 @@ resource "azurerm_role_assignment" "workspace_identity_data_receiver" {
   role_definition_name = "Azure Event Hubs Data Receiver"
   principal_id         = local.effective_workspace_identity_principal_id
 }
+
+# Least-privilege (listen-only) SAS policy for the Eventstream connection
+# in fabric.tf -- only needed in the SAS/local-auth mode; workspace
+# identity mode (above) authenticates as itself instead.
+resource "azurerm_eventhub_authorization_rule" "eventstream_listen" {
+  count = local.use_workspace_identity ? 0 : 1
+
+  name                = "eventstream-listen"
+  namespace_name      = azurerm_eventhub_namespace.this.name
+  eventhub_name       = azurerm_eventhub.this.name
+  resource_group_name = data.azurerm_resource_group.this.name
+
+  listen = true
+  send   = false
+  manage = false
+}

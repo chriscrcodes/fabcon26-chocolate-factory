@@ -9,16 +9,15 @@
 # guess.
 
 # ---------------------------------------------------------------------
-# Capacity (only resolved when creating a new workspace -- an existing
-# workspace already has one, which is exactly the trial-capacity
-# workaround; see variables_fabric.tf).
+# Capacity -- provisioned by capacity.tf (azapi); looked up here by
+# display_name since that's the value we control directly, rather than
+# guessing at how the Fabric-side capacity ID maps to the ARM resource ID.
 # ---------------------------------------------------------------------
 
 data "fabric_capacity" "this" {
-  count = var.use_existing_workspace ? 0 : 1
+  display_name = azapi_resource.fabric_capacity.name
 
-  id           = var.capacity_id != "" ? var.capacity_id : null
-  display_name = var.capacity_id == "" ? var.capacity_display_name : null
+  depends_on = [time_sleep.capacity_ready]
 
   lifecycle {
     postcondition {
@@ -29,35 +28,25 @@ data "fabric_capacity" "this" {
 }
 
 # ---------------------------------------------------------------------
-# Workspace -- create new, or reference existing (trial-tenant path).
+# Workspace -- dedicated workspace on the capacity above.
 # ---------------------------------------------------------------------
 
 resource "fabric_workspace" "this" {
-  count = var.use_existing_workspace ? 0 : 1
-
   display_name                   = var.new_workspace_display_name
   description                    = "Chocolate factory demo -- Factory/Quality telemetry Eventhouse"
-  capacity_id                    = data.fabric_capacity.this[0].id
+  capacity_id                    = data.fabric_capacity.this.id
   skip_capacity_state_validation = var.skip_capacity_state_validation
 
   identity = var.enable_workspace_identity ? { type = "SystemAssigned" } : null
 }
 
-data "fabric_workspace" "existing" {
-  count = var.use_existing_workspace ? 1 : 0
-
-  id                             = var.existing_workspace_id != "" ? var.existing_workspace_id : null
-  display_name                   = var.existing_workspace_id == "" ? var.existing_workspace_display_name : null
-  skip_capacity_state_validation = var.skip_capacity_state_validation
-}
-
 locals {
-  workspace_id = var.use_existing_workspace ? data.fabric_workspace.existing[0].id : fabric_workspace.this[0].id
+  workspace_id = fabric_workspace.this.id
 
   # Feeds workspace_identity_principal_id (main.tf / variables.tf) so the
   # Event Hub Data Receiver role assignment can be wired up automatically
-  # when workspace identity is available -- whichever path it came from.
-  workspace_identity_service_principal_id = var.use_existing_workspace ? try(data.fabric_workspace.existing[0].identity.service_principal_id, "") : try(fabric_workspace.this[0].identity.service_principal_id, "")
+  # when workspace identity is enabled.
+  workspace_identity_service_principal_id = try(fabric_workspace.this.identity.service_principal_id, "")
 }
 
 # ---------------------------------------------------------------------
@@ -80,21 +69,69 @@ resource "fabric_kql_database" "this" {
 }
 
 # ---------------------------------------------------------------------
-# Eventstream -- reuses demo/eventhouse/eventstream.json as-is, filling
-# its placeholders via TextReplace rather than editing the file (so it
-# stays portable/manually-usable outside Terraform too). Skipped entirely
-# if no existing Event Hub connection was supplied.
+# Connection -- the "cloud connection" from Fabric to the Event Hub
+# created in evh.tf. type/creationMethod ("EventHub"/"EventHub.Contents")
+# and their required parameters (endpoint, entityPath) come from a live
+# call to the Fabric ListSupportedConnectionTypes API
+# (https://learn.microsoft.com/en-us/rest/api/fabric/core/connections/list-supported-connection-types)
+# against this tenant -- that connector's supportedCredentialTypes are
+# OAuth2/Basic/WorkspaceIdentity (no SAS-specific type), and "Basic"
+# is what the Fabric UI's "Shared Access Key" auth kind maps to
+# (username = SAS policy name, password = SAS key) per
+# https://learn.microsoft.com/en-us/fabric/real-time-intelligence/get-data-event-hub.
+#
+# Two modes, matching evh.tf's local.use_workspace_identity:
+#   - workspace identity (enable_workspace_identity = true): the
+#     workspace authenticates as itself, already granted Data Receiver
+#     in evh.tf.
+#   - default: Basic credentials using the listen-only SAS rule from
+#     evh.tf (azurerm_eventhub_authorization_rule.eventstream_listen).
 # ---------------------------------------------------------------------
 
-data "fabric_connection" "event_hub" {
-  count = var.existing_event_hub_connection_id != "" ? 1 : 0
+resource "fabric_connection" "event_hub" {
+  display_name      = "chocolate-factory-event-hub"
+  connectivity_type = "ShareableCloud"
 
-  id = var.existing_event_hub_connection_id
+  connection_details = {
+    type            = "EventHub"
+    creation_method = "EventHub.Contents"
+    parameters = [
+      {
+        name  = "endpoint"
+        value = "${azurerm_eventhub_namespace.this.name}.servicebus.windows.net"
+      },
+      {
+        name  = "entityPath"
+        value = azurerm_eventhub.this.name
+      }
+    ]
+  }
+
+  credential_details = local.use_workspace_identity ? {
+    credential_type   = "WorkspaceIdentity"
+    basic_credentials = null
+    } : {
+    credential_type = "Basic"
+    basic_credentials = {
+      username            = azurerm_eventhub_authorization_rule.eventstream_listen[0].name
+      password_wo         = azurerm_eventhub_authorization_rule.eventstream_listen[0].primary_key
+      password_wo_version = 1
+    }
+  }
 }
 
-resource "fabric_eventstream" "this" {
-  count = var.existing_event_hub_connection_id != "" ? 1 : 0
+# ---------------------------------------------------------------------
+# Eventstream -- reuses demo/eventhouse/eventstream.json as-is, filling
+# its placeholders via TextReplace rather than editing the file (so it
+# stays portable/manually-usable outside Terraform too).
+#
+# Each destination's "itemId" must be the KQL database's own item ID,
+# not the parent Eventhouse's -- verified against a live tenant, where
+# passing the Eventhouse ID fails with "Unable to extract cluster URL
+# from the Eventhouse KQL database item ID <id>".
+# ---------------------------------------------------------------------
 
+resource "fabric_eventstream" "this" {
   display_name = "chocolate-factory-eventstream"
   workspace_id = local.workspace_id
   format       = "Default"
@@ -107,7 +144,7 @@ resource "fabric_eventstream" "this" {
         {
           type  = "TextReplace"
           find  = "<EVENT_HUB_CONNECTION_ID>"
-          value = data.fabric_connection.event_hub[0].id
+          value = fabric_connection.event_hub.id
         },
         {
           type  = "TextReplace"
@@ -116,8 +153,8 @@ resource "fabric_eventstream" "this" {
         },
         {
           type  = "TextReplace"
-          find  = "<EVENTHOUSE_ITEM_ID>"
-          value = fabric_eventhouse.this.id
+          find  = "<KQL_DATABASE_ITEM_ID>"
+          value = fabric_kql_database.this.id
         },
         {
           type  = "TextReplace"

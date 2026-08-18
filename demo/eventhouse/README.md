@@ -39,8 +39,12 @@ Fill in the placeholders before creating the item:
   connections and gateways → create one for the namespace if it doesn't
   exist yet).
 - `<WORKSPACE_ID>` — the target workspace's GUID (from its URL).
-- `<EVENTHOUSE_ITEM_ID>` — the Eventhouse item's GUID (Eventhouse →
-  Settings, or its URL).
+- `<KQL_DATABASE_ITEM_ID>` — the KQL database item's own GUID (its
+  Settings, or its URL) -- **not** the parent Eventhouse's GUID; the
+  Eventstream destination's `itemId` must resolve directly to a
+  queryable database, and passing the Eventhouse's ID instead fails
+  with "Unable to extract cluster URL from the Eventhouse KQL database
+  item ID ..." (verified against a live tenant).
 - `<KQL_DATABASE_NAME>` — the KQL database name inside that Eventhouse
   (the one `01`–`03` were run against).
 

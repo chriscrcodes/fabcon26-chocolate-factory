@@ -12,24 +12,15 @@ user_object_id = "<YOUR_AAD_OBJECT_ID>"
 workspace_identity_principal_id = ""
 
 # --- Fabric ---
-# Two setups below -- pick one and delete/comment the other.
+# capacity.tf provisions a real Azure-provisioned Fabric capacity (trial
+# capacities are an unsupported, documented limitation of the fabric
+# provider), and fabric.tf creates a dedicated workspace on it.
 
-# Setup A: Fabric trial tenant (no Azure-provisioned capacity available).
-# The fabric provider's own docs list trial capacities as unsupported, so
-# reference a workspace that already exists on one instead of creating a
-# new workspace + capacity lookup.
-use_existing_workspace          = true
-existing_workspace_display_name = "<your-trial-workspace-name>"
-# existing_workspace_id          = ""   # alternative to display_name above
+new_workspace_display_name = "Chocolate Factory"
+fabric_capacity_sku        = "F2"
+# fabric_capacity_name      = ""   # leave empty for a deterministic default, see variables_fabric.tf
 
-# Setup B: real Azure-provisioned Fabric capacity -- create a new workspace.
-# use_existing_workspace    = false
-# new_workspace_display_name = "Chocolate Factory"
-# capacity_display_name      = "<your-capacity-name>"
-# enable_workspace_identity  = true   # optional -- see variables_fabric.tf
+# At least one Fabric capacity admin (UPN or object ID) is required.
+fabric_capacity_admin_members = ["<your-upn-or-object-id>"]
 
-# Both setups: create the Event Hub source connection once via the Fabric
-# UI (see demo/eventhouse/README.md), then paste its ID here to also
-# create the Eventstream. Leave empty to create just the Eventhouse + KQL
-# Database and skip the Eventstream for now.
-existing_event_hub_connection_id = ""
+# enable_workspace_identity = true   # optional -- see variables_fabric.tf

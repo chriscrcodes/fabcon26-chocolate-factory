@@ -144,7 +144,7 @@
       "properties": {
         "dataIngestionMode": "ProcessedIngestion",
         "workspaceId": "<WORKSPACE_ID>",
-        "itemId": "<EVENTHOUSE_ITEM_ID>",
+        "itemId": "<KQL_DATABASE_ITEM_ID>",
         "databaseName": "<KQL_DATABASE_NAME>",
         "tableName": "bronze_sensor_reading",
         "inputSerialization": {
@@ -183,7 +183,7 @@
       "properties": {
         "dataIngestionMode": "ProcessedIngestion",
         "workspaceId": "<WORKSPACE_ID>",
-        "itemId": "<EVENTHOUSE_ITEM_ID>",
+        "itemId": "<KQL_DATABASE_ITEM_ID>",
         "databaseName": "<KQL_DATABASE_NAME>",
         "tableName": "bronze_quality_check",
         "inputSerialization": {
@@ -222,7 +222,7 @@
       "properties": {
         "dataIngestionMode": "ProcessedIngestion",
         "workspaceId": "<WORKSPACE_ID>",
-        "itemId": "<EVENTHOUSE_ITEM_ID>",
+        "itemId": "<KQL_DATABASE_ITEM_ID>",
         "databaseName": "<KQL_DATABASE_NAME>",
         "tableName": "bronze_batch_event",
         "inputSerialization": {
@@ -259,7 +259,7 @@
       "properties": {
         "dataIngestionMode": "ProcessedIngestion",
         "workspaceId": "<WORKSPACE_ID>",
-        "itemId": "<EVENTHOUSE_ITEM_ID>",
+        "itemId": "<KQL_DATABASE_ITEM_ID>",
         "databaseName": "<KQL_DATABASE_NAME>",
         "tableName": "bronze_line_status",
         "inputSerialization": {
