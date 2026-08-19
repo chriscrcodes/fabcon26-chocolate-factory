@@ -4,10 +4,11 @@ For the Supply Chain specialist agent. Covers sourcing, materials,
 inventory, and shipments.
 
 > **Status:** the `supplier`, `material`, `inventory`, and `shipment`
-> tables are defined in `demo/ontology/ontology_config.json` but have no
-> generator or seed data yet (see the data model design memo). This
-> document defines the intended business semantics ahead of that build,
-> so agent instructions don't have to wait on the data.
+> tables are seeded and deployed to a Fabric SQL Database (see
+> `demo/sql-database/`) — the shipment status vocabulary (Pending/
+> InTransit/Delivered) is what `demo/data-generation/src/business_data.py`
+> settled on. Not yet bound into the Fabric IQ Ontology (see
+> `demo/ontology/README.md`'s "Not yet built").
 
 ## Materials
 

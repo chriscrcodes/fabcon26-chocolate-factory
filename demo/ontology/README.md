@@ -75,7 +75,14 @@ docstring for the exact constraints found live and what's left
 
 Supply Chain (`supplier`, `material`, `inventory`, `shipment`) and
 ERP/Orders (`customer`, `product`, `sales_order`, `order_line`, `invoice`)
-tables are defined in `ontology_config.json` but have no seed data,
-generator, or Fabric SQL Database yet — only the Factory/Quality domain
-(streamed to the Eventhouse, plus its 4 dimension tables above) is wired
-up and bound into the ontology so far.
+have seed data (`demo/data-generation/src/business_data.py`) and a
+Fabric SQL Database (`demo/sql-database/`), but aren't bound into the
+Fabric IQ Ontology yet — only the Factory/Quality domain (streamed to
+the Eventhouse, plus its 4 dimension tables above) is wired up and bound
+so far. Binding a Fabric SQL Database as an ontology data source hasn't
+been attempted; the ontology-definition schema's `sourceType` options
+found so far are `KustoTable` and `LakehouseTable` only (see
+`generate_fabric_iq_definition.py`'s docstring), so this may need the
+Supply Chain/ERP data mirrored into the dimension Lakehouse instead of
+the SQL Database, or a different binding mechanism entirely — not
+verified live yet.

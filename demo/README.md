@@ -14,7 +14,9 @@ we don't edit them in place).
   `batch_event`, `line_status`) to Azure Event Hub, matching
   `ontology/ontology_config.json` field-for-field. Not (yet) a patch to
   `sources/fabric-data-generation` — it's an independent producer that any
-  Fabric Eventstream can consume.
+  Fabric Eventstream can consume. Also generates the Supply Chain/ERP
+  seed data (`run_business_seed.py`) — batch, not streamed, per the
+  medallion-layers memo's two-plane design.
 - [`eventhouse/`](eventhouse) — Bronze/Silver/Gold KQL for the Eventhouse:
   raw ingestion tables, per-stage Silver pivots + dimension joins, and
   Gold rollups (one materialized view, three functions — see the
@@ -23,6 +25,10 @@ we don't edit them in place).
   and verified end to end against a live Eventhouse — see
   `eventhouse/README.md`'s "Verified against a live tenant" section for
   the issues that surfaced only from a real run and how they were fixed.
+- [`sql-database/`](sql-database) — Supply Chain/ERP tables (9 total) +
+  3 Gold views on a Fabric SQL Database — the batch/transactional plane.
+  Deployed and verified end to end against a real tenant — see
+  `sql-database/README.md`.
 - `agents/` — not started. Coordinator + domain-specialist (Factory/Quality,
   Supply Chain, ERP/Orders) instructions and orchestration config for
   Microsoft Foundry.
@@ -36,10 +42,10 @@ we don't edit them in place).
   built yet, see `kb/README.md`.
 - [`infra/`](infra) — one Terraform state for Azure (Event Hub) and
   Fabric (capacity, workspace, Eventhouse, KQL Database, Connection,
-  Eventstream, dimension Lakehouse, Fabric IQ Ontology). Provisions a
-  real Azure Fabric capacity (F2 by default) rather than assuming one
-  exists. Deployed and verified against a real tenant — see
-  `infra/README.md`.
+  Eventstream, dimension Lakehouse, Fabric SQL Database, Fabric IQ
+  Ontology). Provisions a real Azure Fabric capacity (F2 by default)
+  rather than assuming one exists. Deployed and verified against a real
+  tenant — see `infra/README.md`.
 
 Nine production stages in three phases (Farm Preparation / Factory
 Processing / Finishing) — Farm Preparation happens off-site near cocoa

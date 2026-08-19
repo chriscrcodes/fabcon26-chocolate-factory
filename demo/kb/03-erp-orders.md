@@ -4,10 +4,13 @@ For the ERP/Orders specialist agent. Covers products, customers, sales
 orders, and invoicing.
 
 > **Status:** the `customer`, `product`, `sales_order`, `order_line`, and
-> `invoice` tables are defined in `demo/ontology/ontology_config.json`
-> but have no generator or seed data yet (see the data model design
-> memo). This document defines the intended business semantics ahead of
-> that build.
+> `invoice` tables are seeded and deployed to a Fabric SQL Database (see
+> `demo/sql-database/`) — the customer-segment (Retail/Wholesale/
+> FoodService/DirectToConsumer) and order-status (Draft/Confirmed/
+> Shipped/Delivered/Cancelled) vocabularies are what
+> `demo/data-generation/src/business_data.py` settled on. Not yet bound
+> into the Fabric IQ Ontology (see `demo/ontology/README.md`'s "Not yet
+> built").
 
 ## Products
 

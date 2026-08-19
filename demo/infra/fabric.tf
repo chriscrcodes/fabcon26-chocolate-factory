@@ -211,6 +211,53 @@ resource "null_resource" "load_dimension_tables" {
 }
 
 # ---------------------------------------------------------------------
+# Fabric SQL Database -- Supply Chain + ERP/Orders plane (batch/
+# transactional business data, not streaming telemetry), per the
+# medallion-layers design memo's two-plane design. Created empty by
+# Terraform; schema + seed data loaded by
+# demo/sql-database/deploy_sql_database.py (python-tds, no native ODBC
+# driver needed) via a local-exec provisioner, same pattern as
+# load_kql/load_dimension_tables.
+# ---------------------------------------------------------------------
+
+resource "fabric_sql_database" "business" {
+  display_name = "chocolate_factory_business"
+  workspace_id = local.workspace_id
+}
+
+resource "null_resource" "load_business_sql" {
+  depends_on = [fabric_sql_database.business]
+
+  triggers = {
+    files_hash = sha256(join("", [
+      for f in [
+        "${path.module}/../sql-database/01_tables.sql",
+        "${path.module}/../sql-database/02_gold.sql",
+        "${path.module}/../sql-database/deploy_sql_database.py",
+        "${path.module}/../ontology/tables/supplier.csv",
+        "${path.module}/../ontology/tables/material.csv",
+        "${path.module}/../ontology/tables/inventory.csv",
+        "${path.module}/../ontology/tables/shipment.csv",
+        "${path.module}/../ontology/tables/customer.csv",
+        "${path.module}/../ontology/tables/product.csv",
+        "${path.module}/../ontology/tables/sales_order.csv",
+        "${path.module}/../ontology/tables/order_line.csv",
+        "${path.module}/../ontology/tables/invoice.csv",
+      ] : filesha256(f)
+    ]))
+  }
+
+  provisioner "local-exec" {
+    command = "uv run --with azure-identity --with python-tds --with certifi --with pyopenssl ${path.module}/../sql-database/deploy_sql_database.py"
+
+    environment = {
+      FABRIC_SQL_SERVER_FQDN   = fabric_sql_database.business.properties.server_fqdn
+      FABRIC_SQL_DATABASE_NAME = fabric_sql_database.business.properties.database_name
+    }
+  }
+}
+
+# ---------------------------------------------------------------------
 # Connection -- the "cloud connection" from Fabric to the Event Hub
 # created in azure.tf. type/creationMethod ("EventHub"/"EventHub.Contents")
 # and their required parameters (endpoint, entityPath) come from a live
@@ -431,5 +478,25 @@ output "FABRIC_EVENTSTREAM_ID" {
 output "FABRIC_WORKSPACE_IDENTITY_ENABLED" {
   description = "Whether the workspace has an identity Terraform could read."
   value       = local.workspace_identity_service_principal_id != ""
+}
+
+output "FABRIC_LAKEHOUSE_ID" {
+  description = "Dimension Lakehouse item ID."
+  value       = fabric_lakehouse.dimensions.id
+}
+
+output "FABRIC_SQL_DATABASE_ID" {
+  description = "Supply Chain/ERP Fabric SQL Database item ID."
+  value       = fabric_sql_database.business.id
+}
+
+output "FABRIC_SQL_SERVER_FQDN" {
+  description = "Fabric SQL Database server FQDN -- FABRIC_SQL_SERVER_FQDN for demo/sql-database/deploy_sql_database.py when running it by hand."
+  value       = fabric_sql_database.business.properties.server_fqdn
+}
+
+output "FABRIC_SQL_DATABASE_NAME" {
+  description = "Fabric SQL Database name -- FABRIC_SQL_DATABASE_NAME for demo/sql-database/deploy_sql_database.py when running it by hand."
+  value       = fabric_sql_database.business.properties.database_name
 }
 

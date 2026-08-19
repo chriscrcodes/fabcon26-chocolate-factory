@@ -23,12 +23,15 @@ Fabric together:
   expose that ARM resource), a dedicated workspace on it, Eventhouse, KQL
   Database, the Fabric Connection to the Event Hub, the Eventstream item
   itself (built from `demo/eventhouse/eventstream.json`), a Lakehouse
-  holding the ontology's dimension tables, a Fabric IQ Ontology (preview)
-  bound to both, and `null_resource`s (`hashicorp/null` provider) that
-  deploy the Bronze/Silver/Gold KQL, the dimension Lakehouse tables, and
-  the Ontology definition via `local-exec` provisioners — see
+  holding the ontology's dimension tables, a Fabric SQL Database holding
+  the Supply Chain/ERP tables, a Fabric IQ Ontology (preview) bound
+  across the Eventhouse and Lakehouse, and `null_resource`s
+  (`hashicorp/null` provider) that deploy the Bronze/Silver/Gold KQL, the
+  dimension Lakehouse tables, the Supply Chain/ERP SQL schema + seed
+  data, and the Ontology definition via `local-exec` provisioners — see
   [`../eventhouse/run_kql.py`](../eventhouse/run_kql.py),
   [`../ontology/deploy_dimension_lakehouse.py`](../ontology/deploy_dimension_lakehouse.py),
+  [`../sql-database/deploy_sql_database.py`](../sql-database/deploy_sql_database.py),
   and
   [`../ontology/deploy_fabric_iq_ontology.py`](../ontology/deploy_fabric_iq_ontology.py)
 - [`terraform.tfvars.example`](terraform.tfvars.example) — copy to
@@ -37,7 +40,8 @@ Fabric together:
 Deployed and verified end to end against a real tenant: `terraform apply`
 provisions the F2 capacity, workspace, Eventhouse, KQL database,
 Connection, Eventstream, Bronze/Silver/Gold KQL + reference data,
-dimension Lakehouse, and Fabric IQ Ontology, and `demo/data-generation`'s
+dimension Lakehouse, Fabric SQL Database + Supply Chain/ERP data, and
+Fabric IQ Ontology, and `demo/data-generation`'s
 simulator streams events all the way through
 to the Gold layer.
 
