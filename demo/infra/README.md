@@ -23,17 +23,22 @@ Fabric together:
   expose that ARM resource), a dedicated workspace on it, Eventhouse, KQL
   Database, the Fabric Connection to the Event Hub, the Eventstream item
   itself (built from `demo/eventhouse/eventstream.json`), a Lakehouse
-  holding the ontology's dimension tables, a Fabric SQL Database holding
-  the Supply Chain/ERP tables, a Fabric IQ Ontology (preview) bound
-  across the Eventhouse and Lakehouse, and `null_resource`s
-  (`hashicorp/null` provider) that deploy the Bronze/Silver/Gold KQL, the
-  dimension Lakehouse tables, the Supply Chain/ERP SQL schema + seed
-  data, and the Ontology definition via `local-exec` provisioners — see
+  holding the ontology's dimension tables *and* the `demo/kb/*.md`
+  knowledge-base docs, a Fabric SQL Database holding the Supply
+  Chain/ERP tables, a Fabric IQ Ontology (preview) bound across the
+  Eventhouse and Lakehouse, a workspace role assignment granting the
+  Azure AI Search service (`azure.tf`) Contributor so its OneLake
+  indexer can read the Lakehouse, and `null_resource`s (`hashicorp/null`
+  provider) that deploy the Bronze/Silver/Gold KQL, the dimension
+  Lakehouse tables, the Supply Chain/ERP SQL schema + seed data, the
+  Ontology definition, the KB markdown uploads, and the Search
+  data-source/index/indexer, all via `local-exec` provisioners — see
   [`../eventhouse/run_kql.py`](../eventhouse/run_kql.py),
   [`../ontology/deploy_dimension_lakehouse.py`](../ontology/deploy_dimension_lakehouse.py),
   [`../sql-database/deploy_sql_database.py`](../sql-database/deploy_sql_database.py),
-  and
-  [`../ontology/deploy_fabric_iq_ontology.py`](../ontology/deploy_fabric_iq_ontology.py)
+  [`../ontology/deploy_fabric_iq_ontology.py`](../ontology/deploy_fabric_iq_ontology.py),
+  [`../kb/deploy_kb_files.py`](../kb/deploy_kb_files.py), and
+  [`../kb/deploy_search_indexer.py`](../kb/deploy_search_indexer.py)
 - [`terraform.tfvars.example`](terraform.tfvars.example) — copy to
   `terraform.tfvars` and fill in the Azure/Fabric values
 
@@ -246,3 +251,34 @@ resource here covers arbitrary Kusto control commands, and the
 materialized views is unconfirmed (see the `fabric_kql_database` note
 above). `run_kql.py` reuses the same statement-splitting approach
 verified live against this tenant, command by command, this session.
+
+### Foundry IQ knowledge base — Search-side plumbing only
+
+`azurerm_search_service.kb` (Basic tier), `fabric_workspace_role_assignment.search_contributor`,
+`null_resource.load_kb_files`, and `null_resource.deploy_search_indexer`
+provision and verify everything up to a queryable Azure AI Search index
+over `demo/kb/*.md` — confirmed live end to end (`4/4` docs indexed,
+test query for "overdue invoice" correctly surfaces
+`03-erp-orders.md`). Two live-verified fixes needed beyond the
+documented happy path:
+
+- The OneLake files indexer's minimum required Fabric workspace role is
+  **Contributor**, not Viewer (per
+  [Microsoft Learn](https://learn.microsoft.com/en-us/azure/search/search-how-to-index-onelake-files)'s
+  "Grant permissions" section) — Viewer was tried first and never
+  produced a permissions error, it just silently indexed nothing, so
+  don't assume Viewer is "probably fine."
+- OneLake's `metadata_storage_path` values are full URLs
+  (`https://onelake.blob.fabric.microsoft.com/...`), which contain `:`
+  and `/` — invalid characters for a Search index key. First run failed
+  every document with "Invalid document key." Fixed with the standard
+  blob-indexer `fieldMappings` `base64Encode` function on the key field
+  (see `demo/kb/deploy_search_indexer.py`).
+
+**Not covered by this Terraform state**: the actual Foundry IQ
+**knowledge base** object — a Foundry-portal-only step layered on top of
+this Search index, with no documented Terraform/CLI/REST path as of this
+writing. See `demo/kb/README.md` for the manual steps and why. A
+from-scratch `terraform apply` gets you a ready-to-query Search index;
+turning that into something a Foundry agent can call still requires one
+manual portal action.

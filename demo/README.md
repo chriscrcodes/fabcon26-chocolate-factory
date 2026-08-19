@@ -37,15 +37,18 @@ we don't edit them in place).
   (Bronze/Silver/Gold design + the Kusto-docs reality check).
 - [`kb/`](kb) — unstructured knowledge-base documents for Foundry IQ:
   process glossary, sensor metric ranges, business-rule definitions per
-  domain. Planned to deploy as a Foundry IQ knowledge source pointed
-  directly at OneLake files (no Azure AI Search indexing needed) — not
-  built yet, see `kb/README.md`.
-- [`infra/`](infra) — one Terraform state for Azure (Event Hub) and
-  Fabric (capacity, workspace, Eventhouse, KQL Database, Connection,
-  Eventstream, dimension Lakehouse, Fabric SQL Database, Fabric IQ
-  Ontology). Provisions a real Azure Fabric capacity (F2 by default)
-  rather than assuming one exists. Deployed and verified against a real
-  tenant — see `infra/README.md`.
+  domain. Uploaded to OneLake and indexed by a live Azure AI Search
+  OneLake files indexer, deployed and verified end to end — see
+  `kb/README.md`. The Foundry IQ knowledge base layered on top of that
+  index (still provisions a real Search index under the hood — "no ETL"
+  doesn't mean "no Search") is a one-time manual Foundry-portal step,
+  not yet done.
+- [`infra/`](infra) — one Terraform state for Azure (Event Hub, Azure AI
+  Search) and Fabric (capacity, workspace, Eventhouse, KQL Database,
+  Connection, Eventstream, dimension Lakehouse, Fabric SQL Database,
+  Fabric IQ Ontology). Provisions a real Azure Fabric capacity (F2 by
+  default) rather than assuming one exists. Deployed and verified
+  against a real tenant — see `infra/README.md`.
 
 Nine production stages in three phases (Farm Preparation / Factory
 Processing / Finishing) — Farm Preparation happens off-site near cocoa

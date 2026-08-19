@@ -173,3 +173,44 @@ output "LOCAL_AUTH_ENABLED" {
   description = "Whether local (SAS) auth is enabled -- false only when workspace_identity_principal_id was supplied"
   value       = !local.use_workspace_identity
 }
+
+# ---------------------------------------------------------------------
+# Azure AI Search -- backs the Foundry IQ knowledge base over demo/kb/
+# (see demo/kb/README.md). Foundry IQ's OneLake ingestion still
+# provisions/uses a real Search index behind the scenes (it only
+# eliminates hand-building the ingestion/chunking pipeline, not Search
+# itself -- confirmed against
+# https://learn.microsoft.com/en-us/fabric/onelake/onelake-foundry-knowledge),
+# so this is a real, billable Azure resource, not a Fabric item.
+# System-assigned identity is what the OneLake files indexer
+# (demo/kb/deploy_search_indexer.py) uses to read the Lakehouse's
+# Files/kb/ folder -- granted a Fabric workspace role in fabric.tf.
+# ---------------------------------------------------------------------
+
+resource "azurerm_search_service" "kb" {
+  name                = "srch-${var.name_prefix}-${local.suffix}"
+  resource_group_name = data.azurerm_resource_group.this.name
+  location            = var.location
+  sku                 = "basic"
+
+  identity {
+    type = "SystemAssigned"
+  }
+
+  tags = var.tags
+}
+
+output "AZURE_SEARCH_SERVICE_NAME" {
+  description = "Azure AI Search service name backing the Foundry IQ knowledge base."
+  value       = azurerm_search_service.kb.name
+}
+
+output "AZURE_SEARCH_SERVICE_ENDPOINT" {
+  description = "Azure AI Search service endpoint -- AZURE_SEARCH_ENDPOINT for demo/kb/deploy_search_indexer.py."
+  value       = "https://${azurerm_search_service.kb.name}.search.windows.net"
+}
+
+output "AZURE_SEARCH_PRINCIPAL_ID" {
+  description = "Azure AI Search service's system-assigned managed identity principal ID -- granted a Fabric workspace role in fabric.tf so the OneLake files indexer can read Files/kb/."
+  value       = azurerm_search_service.kb.identity[0].principal_id
+}

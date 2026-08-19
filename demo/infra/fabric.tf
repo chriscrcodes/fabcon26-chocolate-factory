@@ -185,6 +185,79 @@ resource "fabric_lakehouse" "dimensions" {
   workspace_id = local.workspace_id
 }
 
+# ---------------------------------------------------------------------
+# Foundry IQ knowledge base source files -- demo/kb/*.md uploaded to the
+# same dimension Lakehouse's Files area (Files/kb/, alongside
+# Files/dimensions/), so an Azure AI Search OneLake files indexer (see
+# demo/kb/deploy_search_indexer.py) has something to index. No "Load
+# Table" step -- these are unstructured docs, not tabular data.
+# ---------------------------------------------------------------------
+
+resource "null_resource" "load_kb_files" {
+  depends_on = [fabric_lakehouse.dimensions]
+
+  triggers = {
+    files_hash = sha256(join("", [
+      for f in [
+        "${path.module}/../kb/00-company-overview.md",
+        "${path.module}/../kb/01-factory-quality.md",
+        "${path.module}/../kb/02-supply-chain.md",
+        "${path.module}/../kb/03-erp-orders.md",
+        "${path.module}/../kb/deploy_kb_files.py",
+      ] : filesha256(f)
+    ]))
+  }
+
+  provisioner "local-exec" {
+    command = "uv run --with azure-identity --with azure-storage-file-datalake ${path.module}/../kb/deploy_kb_files.py"
+
+    environment = {
+      FABRIC_WORKSPACE_ID = local.workspace_id
+      FABRIC_LAKEHOUSE_ID = fabric_lakehouse.dimensions.id
+    }
+  }
+}
+
+# Grants the Azure AI Search service's system-assigned managed identity
+# (azure.tf) access to this workspace, so its OneLake files indexer can
+# list/read Files/kb/ -- Contributor is the documented *minimum* role
+# for a search service identity (Viewer is not sufficient), per
+# https://learn.microsoft.com/en-us/azure/search/search-how-to-index-onelake-files's
+# "Grant permissions" section.
+resource "fabric_workspace_role_assignment" "search_contributor" {
+  workspace_id = local.workspace_id
+
+  principal = {
+    id   = azurerm_search_service.kb.identity[0].principal_id
+    type = "ServicePrincipal"
+  }
+  role = "Contributor"
+}
+
+# Configures the Search-side plumbing (data source + index + indexer)
+# that indexes Files/kb/ straight out of OneLake -- the Foundry IQ
+# knowledge base itself, on top of this index, has no documented
+# Terraform/REST path yet and stays a manual portal step (see
+# demo/kb/README.md).
+resource "null_resource" "deploy_search_indexer" {
+  depends_on = [null_resource.load_kb_files, fabric_workspace_role_assignment.search_contributor]
+
+  triggers = {
+    files_hash = filesha256("${path.module}/../kb/deploy_search_indexer.py")
+  }
+
+  provisioner "local-exec" {
+    command = "uv run --with requests ${path.module}/../kb/deploy_search_indexer.py"
+
+    environment = {
+      AZURE_SEARCH_ENDPOINT  = "https://${azurerm_search_service.kb.name}.search.windows.net"
+      AZURE_SEARCH_ADMIN_KEY = azurerm_search_service.kb.primary_key
+      FABRIC_WORKSPACE_ID    = local.workspace_id
+      FABRIC_LAKEHOUSE_ID    = fabric_lakehouse.dimensions.id
+    }
+  }
+}
+
 resource "null_resource" "load_dimension_tables" {
   depends_on = [fabric_lakehouse.dimensions]
 
