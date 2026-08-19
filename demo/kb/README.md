@@ -19,26 +19,21 @@ Note the version markers inside `02-supply-chain.md` and
 their KB docs define the intended business semantics ahead of that
 build rather than describing live data.
 
-## Deploying
+## Deploying (planned — not built yet)
 
-`fabric-ontology` already has exactly this mechanism: each scenario
-folder under `data/scenarios/<name>/` has a `documents/` subfolder,
-indexed into Azure AI Search by
-`infra/scripts/post-provision/03_upload_to_search.py`, then wired into
-the Foundry agent as a knowledge-base tool alongside the SQL data
-source. To use these:
+`demo/ontology/README.md`'s DIY `fabric-ontology`-accelerator deploy
+path (Azure AI Search indexing via `sources/fabric-ontology`) is no
+longer part of this plan — that repo isn't vendored into this checkout,
+and Foundry IQ turned out to support **native OneLake file ingestion
+with no ETL** (a knowledge source can point directly at files in
+OneLake). The plan is to upload these markdown files into a Lakehouse's
+Files area (same mechanism as `demo/ontology/deploy_dimension_lakehouse.py`
+uses for the dimension CSVs) and register that path as a Foundry IQ
+knowledge source directly — no Azure AI Search indexing script needed.
 
-1. Copy this folder's contents into
-   `sources/fabric-ontology/data/scenarios/chocolate/documents/`
-   (alongside `demo/ontology/`'s deploy target — see
-   `demo/ontology/README.md`).
-2. Run the scenario's `01`–`04` post-provision scripts, which create the
-   Fabric SQL DB data source, index these documents into Azure AI
-   Search, and provision the Foundry agent with both tools attached.
-
-Once the 4-agent Coordinator + specialist split exists (`demo/agents/`,
-not started yet), each specialist should be scoped to its own document(s)
-— `01`, `02`, `03` respectively — plus the shared `00` overview, rather
+Once the Coordinator + specialist agents exist (`demo/agents/`, not
+started yet), each specialist should be scoped to its own document(s) —
+`01`, `02`, `03` respectively — plus the shared `00` overview, rather
 than every agent indexing all four.
 
 ## Extending

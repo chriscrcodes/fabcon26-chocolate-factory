@@ -2,6 +2,7 @@
   "id": "1149230200914213608",
   "dataBindingConfiguration": {
     "dataBindingType": "TimeSeries",
+    "timestampColumnName": "StartTime",
     "propertyBindings": [
       {
         "sourceColumnName": "BatchId",
@@ -31,7 +32,6 @@
       "clusterUri": "{{ .ClusterUri }}",
       "databaseName": "{{ .DatabaseName }}",
       "sourceTableName": "silver_batch"
-    },
-    "timestampColumnName": "StartTime"
+    }
   }
 }

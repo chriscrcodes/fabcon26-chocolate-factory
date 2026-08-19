@@ -1,0 +1,34 @@
+{
+  "id": "994913698131612507",
+  "dataBindingConfiguration": {
+    "dataBindingType": "NonTimeSeries",
+    "propertyBindings": [
+      {
+        "sourceColumnName": "RecipeId",
+        "targetPropertyId": "1044156301829599406"
+      },
+      {
+        "sourceColumnName": "Name",
+        "targetPropertyId": "842231186995993554"
+      },
+      {
+        "sourceColumnName": "CacaoPercent",
+        "targetPropertyId": "728977024279116018"
+      },
+      {
+        "sourceColumnName": "MilkPercent",
+        "targetPropertyId": "698622763263382612"
+      },
+      {
+        "sourceColumnName": "SugarPercent",
+        "targetPropertyId": "613827604095280317"
+      }
+    ],
+    "sourceTableProperties": {
+      "sourceType": "LakehouseTable",
+      "workspaceId": "{{ .WorkspaceId }}",
+      "itemId": "{{ .LakehouseId }}",
+      "sourceTableName": "recipe"
+    }
+  }
+}

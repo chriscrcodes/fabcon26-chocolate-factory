@@ -39,19 +39,43 @@ Then on the Playground: Import/Export → Import → pick `chocolate.rdf`. All
 by domain via each class's icon/color (🏭 Factory/Quality, 🚚 Supply Chain,
 🧾 ERP/Orders).
 
-## Deploying into fabric-ontology
+## Deploying to Fabric IQ
 
-Copy this folder to
-`sources/fabric-ontology/data/scenarios/chocolate/`, then register it in
-`sources/fabric-ontology/data/scenarios/scenarios.json` alongside `retail`
-and `insurance` (`"type": "prebuilt"`, `"folder": "chocolate"`).
+Deployed as a real Fabric IQ Ontology item (preview), bound directly to
+the live Eventhouse and a small dimension Lakehouse — not the
+`sources/fabric-ontology` DIY accelerator this section used to describe
+(that repo isn't vendored into this checkout, and the real product turned
+out to be fully scriptable, so it's no longer part of this plan):
+
+- [`generate_fabric_iq_definition.py`](generate_fabric_iq_definition.py)
+  generates the Ontology's `EntityTypes`/`RelationshipTypes` definition
+  (schema verified against
+  [Microsoft Learn's Ontology item definition article](https://learn.microsoft.com/en-us/rest/api/fabric/articles/item-management/definitions/ontology-definition))
+  into `fabric_iq/`.
+- [`deploy_dimension_lakehouse.py`](deploy_dimension_lakehouse.py) loads
+  `tables/*.csv` into a Lakehouse as real Delta tables (via the OneLake
+  DFS API + the Lakehouse "Load Table" API) — the dimension entities
+  (`factory`, `production_line`, `production_stage`, `recipe`) bind here
+  rather than the Eventhouse, since Eventhouse bindings are TimeSeries-only.
+- [`deploy_fabric_iq_ontology.py`](deploy_fabric_iq_ontology.py) deploys
+  the generated definition via direct Fabric REST calls (not the
+  `fabric_ontology` Terraform resource — verified live that
+  Terraform-issued calls for it reliably fail against this tenant while
+  identical direct REST calls succeed).
+
+All three are wired into `demo/infra/fabric.tf` as `null_resource`s and
+run automatically on `terraform apply` — see `demo/infra/README.md`.
+7 of 8 Factory/Quality entities are bound so far (`sensor_reading` is
+EAV-shaped and still deferred); see
+[`generate_fabric_iq_definition.py`](generate_fabric_iq_definition.py)'s
+docstring for the exact constraints found live and what's left
+(remaining relationship instances, Supply Chain/ERP domains).
 
 ## Not yet built
 
 Supply Chain (`supplier`, `material`, `inventory`, `shipment`) and
 ERP/Orders (`customer`, `product`, `sales_order`, `order_line`, `invoice`)
-tables are defined in `ontology_config.json` but have no seed data or
-generator yet -- only the streamed Factory/Quality tables
-(`sensor_reading`, `quality_check`, `batch`, `line_status`) are wired up
-so far. The Bronze→Silver→Gold KQL itself (update policies, materialized
-views) hasn't been written yet either.
+tables are defined in `ontology_config.json` but have no seed data,
+generator, or Fabric SQL Database yet — only the Factory/Quality domain
+(streamed to the Eventhouse, plus its 4 dimension tables above) is wired
+up and bound into the ontology so far.

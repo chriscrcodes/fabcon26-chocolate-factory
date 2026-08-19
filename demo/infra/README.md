@@ -22,17 +22,23 @@ Fabric together:
   the `azapi` provider since neither `azurerm` nor `microsoft/fabric`
   expose that ARM resource), a dedicated workspace on it, Eventhouse, KQL
   Database, the Fabric Connection to the Event Hub, the Eventstream item
-  itself (built from `demo/eventhouse/eventstream.json`), and a
-  `null_resource` (`hashicorp/null` provider) that deploys the
-  Bronze/Silver/Gold KQL and seeds reference data via a `local-exec`
-  provisioner — see [`../eventhouse/run_kql.py`](../eventhouse/run_kql.py)
+  itself (built from `demo/eventhouse/eventstream.json`), a Lakehouse
+  holding the ontology's dimension tables, a Fabric IQ Ontology (preview)
+  bound to both, and `null_resource`s (`hashicorp/null` provider) that
+  deploy the Bronze/Silver/Gold KQL, the dimension Lakehouse tables, and
+  the Ontology definition via `local-exec` provisioners — see
+  [`../eventhouse/run_kql.py`](../eventhouse/run_kql.py),
+  [`../ontology/deploy_dimension_lakehouse.py`](../ontology/deploy_dimension_lakehouse.py),
+  and
+  [`../ontology/deploy_fabric_iq_ontology.py`](../ontology/deploy_fabric_iq_ontology.py)
 - [`terraform.tfvars.example`](terraform.tfvars.example) — copy to
   `terraform.tfvars` and fill in the Azure/Fabric values
 
 Deployed and verified end to end against a real tenant: `terraform apply`
 provisions the F2 capacity, workspace, Eventhouse, KQL database,
-Connection, Eventstream, and the Bronze/Silver/Gold KQL + reference data,
-and `demo/data-generation`'s simulator streams events all the way through
+Connection, Eventstream, Bronze/Silver/Gold KQL + reference data,
+dimension Lakehouse, and Fabric IQ Ontology, and `demo/data-generation`'s
+simulator streams events all the way through
 to the Gold layer.
 
 Event Hub auth, chosen by whether a workspace identity is available

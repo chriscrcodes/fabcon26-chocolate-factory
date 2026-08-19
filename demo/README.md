@@ -4,10 +4,11 @@ All chocolate-factory scenario code lives here, kept separate from the
 vendored accelerators in `sources/` (each is its own upstream git repo —
 we don't edit them in place).
 
-- [`ontology/`](ontology) — chocolate scenario for `fabric-ontology`:
-  `ontology_config.json` (all 3 agent domains), dimension `tables/*.csv`,
-  `farm-preparation.md`. Deploys into
-  `sources/fabric-ontology/data/scenarios/chocolate/`.
+- [`ontology/`](ontology) — chocolate scenario: `ontology_config.json`
+  (all 3 agent domains), dimension `tables/*.csv`, `farm-preparation.md`.
+  Deployed as a real **Fabric IQ Ontology** item (preview), bound to the
+  live Eventhouse and a small dimension Lakehouse — see
+  `ontology/README.md`'s "Deploying to Fabric IQ" section.
 - [`data-generation/`](data-generation) — standalone Python data generator.
   Streams production-line telemetry (`sensor_reading`, `quality_check`,
   `batch_event`, `line_status`) to Azure Event Hub, matching
@@ -30,13 +31,15 @@ we don't edit them in place).
   (Bronze/Silver/Gold design + the Kusto-docs reality check).
 - [`kb/`](kb) — unstructured knowledge-base documents for Foundry IQ:
   process glossary, sensor metric ranges, business-rule definitions per
-  domain. Deploys alongside `ontology/` into `fabric-ontology`'s
-  document indexing.
-- [`infra/`](infra) — one Terraform state for both Azure (Event Hub) and
+  domain. Planned to deploy as a Foundry IQ knowledge source pointed
+  directly at OneLake files (no Azure AI Search indexing needed) — not
+  built yet, see `kb/README.md`.
+- [`infra/`](infra) — one Terraform state for Azure (Event Hub) and
   Fabric (capacity, workspace, Eventhouse, KQL Database, Connection,
-  Eventstream). Provisions a real Azure Fabric capacity (F2 by default)
-  rather than assuming one exists. Deployed and verified against a real
-  tenant — see `infra/README.md`.
+  Eventstream, dimension Lakehouse, Fabric IQ Ontology). Provisions a
+  real Azure Fabric capacity (F2 by default) rather than assuming one
+  exists. Deployed and verified against a real tenant — see
+  `infra/README.md`.
 
 Nine production stages in three phases (Farm Preparation / Factory
 Processing / Finishing) — Farm Preparation happens off-site near cocoa

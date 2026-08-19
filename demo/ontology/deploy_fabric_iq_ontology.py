@@ -89,6 +89,7 @@ def main() -> None:
         "EventhouseId": os.environ["FABRIC_KQL_DATABASE_ITEM_ID"],
         "ClusterUri": os.environ["FABRIC_CLUSTER_URI"],
         "DatabaseName": os.environ["FABRIC_KQL_DATABASE_NAME"],
+        "LakehouseId": os.environ["FABRIC_LAKEHOUSE_ID"],
     }
 
     session = requests.Session()

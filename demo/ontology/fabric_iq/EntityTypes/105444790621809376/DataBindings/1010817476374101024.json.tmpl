@@ -2,6 +2,7 @@
   "id": "1010817476374101024",
   "dataBindingConfiguration": {
     "dataBindingType": "TimeSeries",
+    "timestampColumnName": "Timestamp",
     "propertyBindings": [
       {
         "sourceColumnName": "Timestamp",
@@ -63,7 +64,6 @@
       "clusterUri": "{{ .ClusterUri }}",
       "databaseName": "{{ .DatabaseName }}",
       "sourceTableName": "silver_quality_check"
-    },
-    "timestampColumnName": "Timestamp"
+    }
   }
 }

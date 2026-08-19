@@ -1,0 +1,30 @@
+{
+  "id": "1120742461680255598",
+  "dataBindingConfiguration": {
+    "dataBindingType": "NonTimeSeries",
+    "propertyBindings": [
+      {
+        "sourceColumnName": "LineId",
+        "targetPropertyId": "258569118613810830"
+      },
+      {
+        "sourceColumnName": "FactoryId",
+        "targetPropertyId": "655514640098032456"
+      },
+      {
+        "sourceColumnName": "LineNumber",
+        "targetPropertyId": "377334217378311161"
+      },
+      {
+        "sourceColumnName": "Name",
+        "targetPropertyId": "469280495669421650"
+      }
+    ],
+    "sourceTableProperties": {
+      "sourceType": "LakehouseTable",
+      "workspaceId": "{{ .WorkspaceId }}",
+      "itemId": "{{ .LakehouseId }}",
+      "sourceTableName": "production_line"
+    }
+  }
+}

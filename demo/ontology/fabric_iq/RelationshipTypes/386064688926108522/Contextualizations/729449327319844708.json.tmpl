@@ -1,0 +1,21 @@
+{
+  "id": "729449327319844708",
+  "dataBindingTable": {
+    "sourceType": "LakehouseTable",
+    "workspaceId": "{{ .WorkspaceId }}",
+    "itemId": "{{ .LakehouseId }}",
+    "sourceTableName": "production_line"
+  },
+  "sourceKeyRefBindings": [
+    {
+      "sourceColumnName": "FactoryId",
+      "targetPropertyId": "258569118613810830"
+    }
+  ],
+  "targetKeyRefBindings": [
+    {
+      "sourceColumnName": "FactoryId",
+      "targetPropertyId": "239934682223052918"
+    }
+  ]
+}

@@ -170,6 +170,47 @@ resource "fabric_kql_database" "this" {
 }
 
 # ---------------------------------------------------------------------
+# Lakehouse -- holds the 4 dimension tables (factory, production_line,
+# production_stage, recipe) as real Delta tables, loaded from
+# demo/ontology/tables/*.csv. These are genuine dimension data with no
+# timestamp column, so Fabric IQ Ontology's Eventhouse binding
+# (TimeSeries-only, verified live) can't cover them -- only
+# LakehouseTableDataBindingProperties can, hence this item.
+# ---------------------------------------------------------------------
+
+resource "fabric_lakehouse" "dimensions" {
+  # Lakehouse names, like Ontology names, reject hyphens -- verified
+  # live ("DisplayName is Invalid for ArtifactType").
+  display_name = "chocolate_factory_dimensions"
+  workspace_id = local.workspace_id
+}
+
+resource "null_resource" "load_dimension_tables" {
+  depends_on = [fabric_lakehouse.dimensions]
+
+  triggers = {
+    files_hash = sha256(join("", [
+      for f in [
+        "${path.module}/../ontology/tables/factory.csv",
+        "${path.module}/../ontology/tables/production_line.csv",
+        "${path.module}/../ontology/tables/production_stage.csv",
+        "${path.module}/../ontology/tables/recipe.csv",
+        "${path.module}/../ontology/deploy_dimension_lakehouse.py",
+      ] : filesha256(f)
+    ]))
+  }
+
+  provisioner "local-exec" {
+    command = "uv run --with azure-identity --with azure-storage-file-datalake --with requests ${path.module}/../ontology/deploy_dimension_lakehouse.py"
+
+    environment = {
+      FABRIC_WORKSPACE_ID = local.workspace_id
+      FABRIC_LAKEHOUSE_ID = fabric_lakehouse.dimensions.id
+    }
+  }
+}
+
+# ---------------------------------------------------------------------
 # Connection -- the "cloud connection" from Fabric to the Event Hub
 # created in azure.tf. type/creationMethod ("EventHub"/"EventHub.Contents")
 # and their required parameters (endpoint, entityPath) come from a live
@@ -304,14 +345,13 @@ resource "null_resource" "load_kql" {
 }
 
 # ---------------------------------------------------------------------
-# Fabric IQ Ontology -- Factory/Quality domain (3 of 8 entities so far:
-# batch, quality_check, line_status -- see
+# Fabric IQ Ontology -- Factory/Quality domain (7 of 8 entities: batch,
+# quality_check, line_status bound TimeSeries to the Eventhouse; factory,
+# production_line, production_stage, recipe bound NonTimeSeries to the
+# dimension Lakehouse above -- see
 # demo/ontology/generate_fabric_iq_definition.py's docstring for why
-# sensor_reading and the 4 dimension tables are deferred). Entity types +
-# data bindings only for now; relationship *instances* need
-# Contextualizations, which the schema only supports sourced from a
-# Lakehouse table, not Eventhouse -- RelationshipTypes are declared, but
-# wiring instances is a follow-up once that's verified live.
+# sensor_reading is still deferred, and which relationships have
+# instance data wired vs. type-only).
 #
 # Deployed via demo/ontology/deploy_fabric_iq_ontology.py (direct Fabric
 # REST calls), not the `fabric_ontology` Terraform resource -- verified
@@ -324,7 +364,7 @@ resource "null_resource" "load_kql" {
 # ---------------------------------------------------------------------
 
 resource "null_resource" "deploy_ontology" {
-  depends_on = [null_resource.load_kql]
+  depends_on = [null_resource.load_kql, null_resource.load_dimension_tables]
 
   triggers = {
     files_hash = sha256(join("", [
@@ -343,6 +383,7 @@ resource "null_resource" "deploy_ontology" {
       FABRIC_KQL_DATABASE_ITEM_ID = fabric_kql_database.this.id
       FABRIC_CLUSTER_URI          = fabric_kql_database.this.properties.query_service_uri
       FABRIC_KQL_DATABASE_NAME    = fabric_kql_database.this.display_name
+      FABRIC_LAKEHOUSE_ID         = fabric_lakehouse.dimensions.id
     }
   }
 }
