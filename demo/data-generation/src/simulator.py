@@ -19,8 +19,9 @@ import os
 import random
 import time
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from event_hub_service import EventHubService
@@ -70,6 +71,7 @@ class Simulator:
     interval_seconds: float
     anomaly_rate: float
     downtime_rate: float = 0.0
+    clock: Callable[[], datetime] = field(default=lambda: datetime.now(UTC))
     events_sent: int = field(default=0)
 
     def _start_batch(self, line: LineState, now: str, payloads: list[dict]) -> None:
@@ -87,7 +89,7 @@ class Simulator:
         )
 
     def tick(self) -> list[dict]:
-        now = datetime.now(UTC).isoformat()
+        now = self.clock().isoformat()
         payloads: list[dict] = []
 
         for line in self.lines:
@@ -214,6 +216,74 @@ class Simulator:
         finally:
             self.event_hub.close()
 
+    def _send_with_retry(self, payloads: list[dict], max_retries: int = 5) -> None:
+        """send_events(), retrying on Event Hub throttling.
+
+        Backfill sends batches back-to-back with no pacing, which can
+        exceed a Standard-tier namespace's throughput units (verified
+        live: a 72h/30s backfill hit "com.microsoft:server-busy" /
+        error code 50002 well before finishing). Throttling is
+        transient -- back off and retry rather than failing the whole
+        backfill; a genuinely undersized `sku_capacity` still surfaces
+        after `max_retries`.
+        """
+        for attempt in range(max_retries):
+            try:
+                self.event_hub.send_events(payloads)
+                return
+            except Exception as e:
+                message = str(e).lower()
+                if "server-busy" not in message and "throttl" not in message:
+                    raise
+                if attempt == max_retries - 1:
+                    raise
+                wait = 2**attempt  # 1s, 2s, 4s, 8s, 16s
+                print(f"  throttled by Event Hub, retrying in {wait}s...")
+                time.sleep(wait)
+
+    def run_backfill(self, hours: float, batch_ticks: int = 20) -> None:
+        """Generate `hours` of history as fast as possible (no sleep).
+
+        Ticks advance a virtual clock by `interval_seconds` each time,
+        same as real-time mode, so stage progression (TicksPerBatch,
+        anomaly/downtime rates) is unaffected -- only wall-clock pacing
+        is skipped. Payloads from `batch_ticks` ticks are grouped into
+        one send_events() call to cut down network round-trips for a
+        large backfill. If a namespace is too small for the volume of
+        a large/fast backfill, raise its `sku_capacity` in
+        `demo/infra/terraform.tfvars` and re-`apply`, or use a lighter
+        `--interval`/smaller `--backfill-batch-ticks`.
+        """
+        total_ticks = int(hours * 3600 / self.interval_seconds)
+        virtual_time = datetime.now(UTC) - timedelta(hours=hours)
+        print(
+            f"backfilling {hours}h of history for {len(self.lines)} lines "
+            f"({total_ticks} ticks at {self.interval_seconds}s/tick, "
+            f"starting {virtual_time.isoformat()})"
+        )
+        try:
+            batch: list[dict] = []
+            for i in range(1, total_ticks + 1):
+                self.clock = lambda vt=virtual_time: vt
+                batch.extend(self.tick())
+                virtual_time += timedelta(seconds=self.interval_seconds)
+
+                if len(batch) and (i % batch_ticks == 0 or i == total_ticks):
+                    self._send_with_retry(batch)
+                    self.events_sent += len(batch)
+                    batch = []
+                    time.sleep(0.2)  # light pacing -- avoids constant throttling
+
+                if i % max(1, total_ticks // 20) == 0 or i == total_ticks:
+                    print(
+                        f"[{i}/{total_ticks}] backfilled up to "
+                        f"{virtual_time.isoformat()} (total events {self.events_sent})"
+                    )
+        except KeyboardInterrupt:
+            print("\nstopped by user")
+        finally:
+            self.event_hub.close()
+
 
 def build_simulator(
     tables_dir: Path,
@@ -292,7 +362,26 @@ def main() -> None:
         default=None,
         help="Path to demo/ontology/tables (default: auto-detected)",
     )
+    parser.add_argument(
+        "--backfill-hours",
+        type=float,
+        default=None,
+        help="Generate this many hours of history as fast as possible "
+        "(no sleep between ticks) instead of streaming in real time. "
+        "Mutually exclusive with --max-runtime.",
+    )
+    parser.add_argument(
+        "--backfill-batch-ticks",
+        type=int,
+        default=20,
+        help="Group this many ticks' events into one send_events() call "
+        "during --backfill-hours, to cut down network round-trips "
+        "(default: 20)",
+    )
     args = parser.parse_args()
+
+    if args.backfill_hours and args.max_runtime:
+        parser.error("--backfill-hours and --max-runtime are mutually exclusive")
 
     tables_dir = (
         Path(args.tables_dir)
@@ -303,7 +392,10 @@ def main() -> None:
     simulator = build_simulator(
         tables_dir, args.interval, args.anomaly_rate, args.downtime_rate
     )
-    simulator.run(max_runtime_seconds=args.max_runtime)
+    if args.backfill_hours:
+        simulator.run_backfill(args.backfill_hours, args.backfill_batch_ticks)
+    else:
+        simulator.run(max_runtime_seconds=args.max_runtime)
 
 
 if __name__ == "__main__":

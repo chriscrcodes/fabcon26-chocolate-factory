@@ -267,6 +267,42 @@ resource "fabric_eventstream" "this" {
   }
 }
 
+# ---------------------------------------------------------------------
+# KQL deployment -- runs demo/eventhouse/01-03.kql (Bronze/Silver/Gold
+# DDL) and seeds the ref_* dimension tables, via a local-exec provisioner.
+# No Terraform-native resource covers Kusto control commands here --
+# fabric_kql_database's `definition` attribute takes a DatabaseSchema.kql
+# bundle, but whether that format tolerates `.alter table policy
+# streamingingestion`/`.create-or-alter materialized-view` is unverified
+# (see demo/eventhouse/README.md); this local-exec path is what was
+# actually run and verified against a live tenant. Requires `az login`
+# and `uv` on the machine running `terraform apply`.
+# ---------------------------------------------------------------------
+
+resource "null_resource" "load_kql" {
+  depends_on = [fabric_kql_database.this]
+
+  triggers = {
+    files_hash = sha256(join("", [
+      for f in [
+        "${path.module}/../eventhouse/01_bronze_and_reference.kql",
+        "${path.module}/../eventhouse/02_silver.kql",
+        "${path.module}/../eventhouse/03_gold.kql",
+        "${path.module}/../eventhouse/run_kql.py",
+      ] : filesha256(f)
+    ]))
+  }
+
+  provisioner "local-exec" {
+    command = "uv run --with azure-kusto-data --with azure-identity ${path.module}/../eventhouse/run_kql.py ${path.module}/../eventhouse/01_bronze_and_reference.kql ${path.module}/../eventhouse/02_silver.kql ${path.module}/../eventhouse/03_gold.kql"
+
+    environment = {
+      KQL_QUERY_URI = fabric_kql_database.this.properties.query_service_uri
+      KQL_DATABASE  = fabric_kql_database.this.display_name
+    }
+  }
+}
+
 output "FABRIC_CAPACITY_ID" {
   description = "Microsoft.Fabric/capacities ARM resource ID."
   value       = azapi_resource.fabric_capacity.id
@@ -290,6 +326,11 @@ output "FABRIC_KQL_DATABASE_NAME" {
 output "FABRIC_KQL_DATABASE_ITEM_ID" {
   description = "KQL database item ID -- <KQL_DATABASE_ITEM_ID> in demo/eventhouse/eventstream.json (destinations' itemId must be the database's own item, not the parent Eventhouse's)."
   value       = fabric_kql_database.this.id
+}
+
+output "FABRIC_KQL_DATABASE_QUERY_URI" {
+  description = "KQL database query URI -- KQL_QUERY_URI for demo/eventhouse/run_kql.py when running it by hand."
+  value       = fabric_kql_database.this.properties.query_service_uri
 }
 
 output "FABRIC_CONNECTION_ID" {

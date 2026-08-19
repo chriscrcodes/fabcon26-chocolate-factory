@@ -6,7 +6,11 @@ design in the medallion-layers design memo and the schema in
 
 ## Deploy order
 
-Run against a KQL queryset in the target Eventhouse database, in order:
+`../infra`'s `terraform apply` runs all of this automatically, in order,
+via `null_resource.load_kql`'s `local-exec` provisioner
+([`run_kql.py`](run_kql.py) — see `../infra/README.md`'s "Deploy"
+section). The order, for anyone iterating on the KQL directly against a
+queryset instead:
 
 1. **[`01_bronze_and_reference.kql`](01_bronze_and_reference.kql)** — 4
    Bronze tables (one per `RecordType` the generator streams), 4 reference
@@ -21,6 +25,10 @@ Run against a KQL queryset in the target Eventhouse database, in order:
    (`gold_line_throughput_hourly()`, `gold_batch_summary()`,
    `gold_factory_oee_daily()`) that join across Silver tables at query
    time, since Kusto materialized views can't have more than one source.
+   Both materialized views use `.create-or-alter`, not `.create`, so
+   `run_kql.py`/a re-`apply` can redeploy them without an
+   `EntityAlreadyExistsException` (`.create materialized-view` isn't
+   idempotent — hit this live before switching).
 
 4. **[`eventstream.json`](eventstream.json)** — the Eventstream item
    definition: one `AzureEventHub` source, a `Filter` operator per
@@ -33,12 +41,15 @@ Run against a KQL queryset in the target Eventhouse database, in order:
    placeholders itself — see there for the manual-deploy fallback if
    Terraform isn't being used.
 
-Once the Eventstream is live, `demo/ontology/tables/*.csv` (written by
-`demo/data-generation/run_seed_data.py`) needs loading into the four
-`ref_*` tables once — `.ingest inline into table ref_factory <| ...` per
-table works for local/dev use; a real deployment should use a Fabric
-pipeline Copy activity instead (see `01`'s comment). Without this, Silver
-enrichment columns (`LineName`, `FactoryCode`, ...) stay blank.
+5. **[`run_kql.py`](run_kql.py)** also loads
+   `demo/ontology/tables/*.csv` (written by
+   `demo/data-generation/run_seed_data.py`) into the four `ref_*` tables
+   — skipped per-table once it already has rows, so re-running is safe.
+   Without this, Silver enrichment columns (`LineName`, `FactoryCode`,
+   ...) stay blank. Doing this by hand instead:
+   `.ingest inline into table ref_factory <| ...` per table works for
+   local/dev use; a real deployment should use a Fabric pipeline Copy
+   activity instead.
 
 The `Filter` operator shape here (`operatorType`/`ColumnReference`/
 `Literal`) is taken directly from Microsoft's own

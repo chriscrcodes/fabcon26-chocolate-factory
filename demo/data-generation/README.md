@@ -63,6 +63,28 @@ Verified against a real Event Hub: an 18-second bounded run
 (`--max-runtime 18`) streamed 219 events across all four record types with
 no connection errors.
 
+### Backfilling history
+
+For a fresh deployment, `demo/eventhouse`'s Gold layer only has as much
+history as you've streamed in real time — not much use for
+`gold_defect_rate_by_stage_daily`'s or `gold_factory_oee_daily()`'s daily
+bins. `--backfill-hours` generates that much history as fast as possible
+(no sleep between ticks — a virtual clock advances by `--interval` per
+tick instead of wall-clock time), so the pipeline sees it as a normal
+burst of real-time-shaped events with historical timestamps:
+
+```bash
+uv run --env-file .env run_simulator.py --backfill-hours 48 --interval 30
+```
+
+A lighter `--interval` keeps the total tick/event count reasonable for a
+larger backfill (48h at the default 5s interval is 34560 ticks; at 30s
+it's 5760) — stage progression (`TicksPerBatch`, anomaly/downtime rates)
+is unaffected either way, since those are per-tick, not per-second.
+`--backfill-batch-ticks` (default `20`) groups that many ticks' events
+into one `send_events()` call to cut down network round-trips. Mutually
+exclusive with `--max-runtime`.
+
 ## Linting
 
 ```bash
@@ -79,5 +101,5 @@ uv run ruff format .    # format
   shipment, customer, product, sales_order, order_line, invoice) are
   defined in the ontology but have no generator yet.
 - Bronze/Silver/Gold KQL and the Eventstream definition now live in
-  [`../eventhouse/`](../eventhouse) -- written but not yet run against a
-  live Eventhouse.
+  [`../eventhouse/`](../eventhouse) -- deployed and verified end to end
+  against a live Eventhouse.

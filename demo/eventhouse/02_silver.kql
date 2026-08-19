@@ -199,7 +199,7 @@
 // 03_gold.kql).
 // ---------------------------------------------------------------------
 
-.create materialized-view silver_batch on table bronze_batch_event
+.create-or-alter materialized-view silver_batch on table bronze_batch_event
 {
     bronze_batch_event
     | summarize

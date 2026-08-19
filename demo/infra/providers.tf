@@ -19,6 +19,10 @@ terraform {
       source  = "hashicorp/time"
       version = "~> 0.11"
     }
+    null = {
+      source  = "hashicorp/null"
+      version = "~> 3.2"
+    }
   }
 }
 
@@ -32,7 +36,7 @@ provider "azurerm" {
 # for service-principal options if that's ever needed instead.
 provider "fabric" {}
 
-# Provisions Microsoft.Fabric/capacities (capacity.tf) -- an ARM resource
+# Provisions Microsoft.Fabric/capacities (fabric.tf) -- an ARM resource
 # not exposed by azurerm or the fabric provider. Defaults to Azure CLI
 # auth like the two providers above.
 provider "azapi" {}

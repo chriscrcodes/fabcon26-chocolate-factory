@@ -21,15 +21,19 @@ Fabric together:
   F2 by default, configurable via `fabric_capacity_sku`, provisioned via
   the `azapi` provider since neither `azurerm` nor `microsoft/fabric`
   expose that ARM resource), a dedicated workspace on it, Eventhouse, KQL
-  Database, the Fabric Connection to the Event Hub, and the Eventstream
-  item itself, built from `demo/eventhouse/eventstream.json`
+  Database, the Fabric Connection to the Event Hub, the Eventstream item
+  itself (built from `demo/eventhouse/eventstream.json`), and a
+  `null_resource` (`hashicorp/null` provider) that deploys the
+  Bronze/Silver/Gold KQL and seeds reference data via a `local-exec`
+  provisioner — see [`../eventhouse/run_kql.py`](../eventhouse/run_kql.py)
 - [`terraform.tfvars.example`](terraform.tfvars.example) — copy to
   `terraform.tfvars` and fill in the Azure/Fabric values
 
 Deployed and verified end to end against a real tenant: `terraform apply`
 provisions the F2 capacity, workspace, Eventhouse, KQL database,
-Connection, and Eventstream, and `demo/data-generation`'s simulator
-streams events through to the Bronze tables.
+Connection, Eventstream, and the Bronze/Silver/Gold KQL + reference data,
+and `demo/data-generation`'s simulator streams events all the way through
+to the Gold layer.
 
 Event Hub auth, chosen by whether a workspace identity is available
 (`workspace_identity_principal_id`, resolved automatically from
@@ -52,10 +56,20 @@ terraform init
 terraform apply
 ```
 
-`fabric.tf` creates the Fabric Connection to the Event Hub and the
-Eventstream itself, so the only manual step left afterward is running
-`demo/eventhouse/01`-`03`'s KQL against the database named by the
-`FABRIC_KQL_DATABASE_NAME` output (see "Not attempted here").
+Also requires [`uv`](https://docs.astral.sh/uv/) on the machine running
+`terraform apply` — `null_resource.load_kql`'s `local-exec` provisioner
+shells out to `uv run --with azure-kusto-data --with azure-identity
+../eventhouse/run_kql.py` to deploy `demo/eventhouse/01`-`03`'s KQL and
+seed the `ref_*` dimension tables from `demo/ontology/tables/*.csv`
+(skipped if already populated, so re-applies don't duplicate rows) —
+nothing manual is left after `terraform apply` completes.
+
+If this step fails with `SSLCertVerificationError`, a corporate
+TLS-inspecting proxy (e.g. Zscaler) is likely intercepting the
+connection to the Kusto endpoint — export `SSL_CERT_FILE` /
+`REQUESTS_CA_BUNDLE` pointing at a CA bundle that includes your
+org's root CA before running `terraform apply` (a local-machine
+fix, not something this config bakes in).
 
 ### Capacity and trial-tenant limitation
 
@@ -119,11 +133,12 @@ Confirmed resources directly relevant to this repo:
   `DatabaseSchema.kql`-shaped bundle (Fabric's Git-integration format for
   a KQL database's schema), **not** an arbitrary ordered script — an
   earlier version of this doc claimed `demo/eventhouse/01`–`03` could be
-  applied through it directly; that's not confirmed, since whether that
-  format tolerates `.alter table policy streamingingestion` and
-  `.create materialized-view` wasn't verifiable against a live tenant
-  here. `fabric.tf` creates the KQL Database as a container only; running
-  `01`–`03` stays a manual step (see "Not attempted here")
+  applied through it directly; that's still unconfirmed, since whether
+  that format tolerates `.alter table policy streamingingestion` and
+  `.create-or-alter materialized-view` was never worth the risk to test
+  once the `local-exec` path below was already proven live, statement by
+  statement. `fabric.tf` creates the KQL Database as a container, and a
+  `null_resource` (see "Deploy" above) runs `01`–`03` against it
 - `fabric_eventstream` — now in `fabric.tf`, takes
   `demo/eventhouse/eventstream.json` as its definition verbatim, with its
   `<PLACEHOLDER>` tokens filled via `TextReplace` parameters rather than
@@ -210,8 +225,14 @@ listen-only SAS rule from `azure.tf`
 `credentialType: "WorkspaceIdentity"` when `enable_workspace_identity =
 true`.
 
-### Not attempted here
+### Running the KQL through Terraform
 
-- **Running `demo/eventhouse/01`–`03` through Terraform.** See the
-  `fabric_kql_database` note above — stays a manual step against the
-  database `fabric.tf` creates (`FABRIC_KQL_DATABASE_NAME` output).
+`demo/eventhouse/01`–`03` are applied by `null_resource.load_kql`'s
+`local-exec` provisioner (see "Deploy" above and
+[`../eventhouse/run_kql.py`](../eventhouse/run_kql.py)) rather than
+`fabric_kql_database`'s `definition` attribute — no Terraform-native
+resource here covers arbitrary Kusto control commands, and the
+`definition` attribute's exact tolerance for update policies and
+materialized views is unconfirmed (see the `fabric_kql_database` note
+above). `run_kql.py` reuses the same statement-splitting approach
+verified live against this tenant, command by command, this session.

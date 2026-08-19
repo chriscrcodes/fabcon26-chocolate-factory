@@ -7,7 +7,7 @@
 // a real materialized view.
 // ---------------------------------------------------------------------
 
-.create materialized-view gold_defect_rate_by_stage_daily on table silver_quality_check
+.create-or-alter materialized-view gold_defect_rate_by_stage_daily on table silver_quality_check
 {
     silver_quality_check
     | summarize
