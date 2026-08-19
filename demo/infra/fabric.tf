@@ -303,6 +303,50 @@ resource "null_resource" "load_kql" {
   }
 }
 
+# ---------------------------------------------------------------------
+# Fabric IQ Ontology -- Factory/Quality domain (3 of 8 entities so far:
+# batch, quality_check, line_status -- see
+# demo/ontology/generate_fabric_iq_definition.py's docstring for why
+# sensor_reading and the 4 dimension tables are deferred). Entity types +
+# data bindings only for now; relationship *instances* need
+# Contextualizations, which the schema only supports sourced from a
+# Lakehouse table, not Eventhouse -- RelationshipTypes are declared, but
+# wiring instances is a follow-up once that's verified live.
+#
+# Deployed via demo/ontology/deploy_fabric_iq_ontology.py (direct Fabric
+# REST calls), not the `fabric_ontology` Terraform resource -- verified
+# live that Terraform-issued create/update calls for this resource
+# reliably fail with an opaque ALMOperationImportFailed error against
+# this tenant, while byte-identical requests sent directly to the same
+# API (same auth, same rendered payload) succeed every time. Same
+# reasoning as run_kql.py: don't fight an unreliable path once a
+# verified-working alternative exists.
+# ---------------------------------------------------------------------
+
+resource "null_resource" "deploy_ontology" {
+  depends_on = [null_resource.load_kql]
+
+  triggers = {
+    files_hash = sha256(join("", [
+      for f in concat(
+        [for f in fileset("${path.module}/../ontology/fabric_iq", "**") : "${path.module}/../ontology/fabric_iq/${f}"],
+        ["${path.module}/../ontology/deploy_fabric_iq_ontology.py"]
+      ) : filesha256(f)
+    ]))
+  }
+
+  provisioner "local-exec" {
+    command = "uv run --with azure-identity --with requests ${path.module}/../ontology/deploy_fabric_iq_ontology.py"
+
+    environment = {
+      FABRIC_WORKSPACE_ID         = local.workspace_id
+      FABRIC_KQL_DATABASE_ITEM_ID = fabric_kql_database.this.id
+      FABRIC_CLUSTER_URI          = fabric_kql_database.this.properties.query_service_uri
+      FABRIC_KQL_DATABASE_NAME    = fabric_kql_database.this.display_name
+    }
+  }
+}
+
 output "FABRIC_CAPACITY_ID" {
   description = "Microsoft.Fabric/capacities ARM resource ID."
   value       = azapi_resource.fabric_capacity.id
@@ -347,3 +391,4 @@ output "FABRIC_WORKSPACE_IDENTITY_ENABLED" {
   description = "Whether the workspace has an identity Terraform could read."
   value       = local.workspace_identity_service_principal_id != ""
 }
+

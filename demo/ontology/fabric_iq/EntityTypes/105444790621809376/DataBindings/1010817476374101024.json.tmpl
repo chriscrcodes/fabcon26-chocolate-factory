@@ -1,0 +1,69 @@
+{
+  "id": "1010817476374101024",
+  "dataBindingConfiguration": {
+    "dataBindingType": "TimeSeries",
+    "propertyBindings": [
+      {
+        "sourceColumnName": "Timestamp",
+        "targetPropertyId": "23766877290235084"
+      },
+      {
+        "sourceColumnName": "CheckId",
+        "targetPropertyId": "4898981233688552"
+      },
+      {
+        "sourceColumnName": "BatchId",
+        "targetPropertyId": "984651808558516618"
+      },
+      {
+        "sourceColumnName": "LineId",
+        "targetPropertyId": "917653192400196507"
+      },
+      {
+        "sourceColumnName": "LineName",
+        "targetPropertyId": "1046023032892135692"
+      },
+      {
+        "sourceColumnName": "FactoryId",
+        "targetPropertyId": "514289810012128040"
+      },
+      {
+        "sourceColumnName": "FactoryCode",
+        "targetPropertyId": "1036973692409813016"
+      },
+      {
+        "sourceColumnName": "StageId",
+        "targetPropertyId": "951164808720082958"
+      },
+      {
+        "sourceColumnName": "StageName",
+        "targetPropertyId": "1034266953625038746"
+      },
+      {
+        "sourceColumnName": "Phase",
+        "targetPropertyId": "646082850473584748"
+      },
+      {
+        "sourceColumnName": "DefectRate",
+        "targetPropertyId": "723663486356699723"
+      },
+      {
+        "sourceColumnName": "Result",
+        "targetPropertyId": "328743483207475592"
+      },
+      {
+        "sourceColumnName": "Notes",
+        "targetPropertyId": "824309966115784283"
+      }
+    ],
+    "sourceTableProperties": {
+      "sourceType": "KustoTable",
+      "workspaceId": "{{ .WorkspaceId }}",
+      "itemId": "{{ .EventhouseId }}",
+      "clusterUri": "{{ .ClusterUri }}",
+      "databaseName": "{{ .DatabaseName }}",
+      "sourceTableName": "silver_quality_check"
+    },
+    "timestampColumnName": "Timestamp"
+  }
+}
