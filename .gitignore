@@ -1,6 +1,19 @@
 # Vendored reference accelerators -- each is its own upstream git repo,
 # cloned for reference/comparison, not part of this repo's own history.
-# See demo/README.md.
+# See README.md.
 sources/
 
 .DS_Store
+
+__pycache__/
+*.pyc
+.env
+.venv/
+.ruff_cache/
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+terraform.tfvars
+tfplan
+crash.log
