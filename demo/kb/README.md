@@ -50,11 +50,10 @@ Deployed and verified live, in two parts:
 2. **The Foundry IQ knowledge base itself — manual, one-time, not yet
    done.** Layering a Foundry IQ knowledge base on top of the Search
    index above has no documented Terraform/CLI/REST path as of this
-   writing — only a Foundry-portal wizard (Build → Knowledge → select
-   the `azurerm_search_service.kb` resource → "Microsoft OneLake" type
-   → supply the Fabric workspace/lakehouse IDs → Create). Do this by
-   hand once, then verify by querying the knowledge base directly in
-   the portal's test panel before wiring it to any agent.
+   writing — only a Foundry-portal wizard. See
+   [`foundry-iq-setup.md`](foundry-iq-setup.md) for the exact
+   prerequisites, values, click-through steps, and how to verify it
+   worked.
 
 Once the Coordinator + specialist agents exist (`demo/agents/`, not
 started yet), each specialist should be scoped to its own document(s) —
