@@ -193,6 +193,15 @@ resource "azurerm_search_service" "kb" {
   location            = var.location
   sku                 = "basic"
 
+  # Semantic ranking is disabled by default at the service level, a
+  # separate control-plane setting from an index's own
+  # semantic.configurations[] block (foundry/kb/deploy_search_indexer.py).
+  # Foundry IQ knowledge bases require it: querying one against a
+  # service without this set fails with "Knowledge Base requires
+  # Semantic Search to be enabled for this service." "free" covers up to
+  # 1,000 semantic queries/month at no extra cost -- plenty for a demo.
+  semantic_search_sku = "free"
+
   identity {
     type = "SystemAssigned"
   }

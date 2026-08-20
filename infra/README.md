@@ -279,6 +279,12 @@ wrapping object). Requirements beyond the documented happy path:
   (`api-version=2026-04-01`, no preview needed) and provisioned by
   `deploy_search_indexer.py`. See `foundry/kb/foundry-iq-setup.md` for
   the manual knowledge-base-creation step this feeds into.
+- **Semantic ranking must be enabled at the service level**, a separate
+  control-plane setting from the index's own `semantic.configurations[]`
+  block above — a knowledge base query against a service without this
+  fails with "Knowledge Base requires Semantic Search to be enabled for
+  this service." `azurerm_search_service.kb`'s `semantic_search_sku =
+  "free"` covers this (1,000 semantic queries/month at no extra cost).
 
 **Not covered by this Terraform state**: the actual Foundry IQ
 **knowledge base** object — a Foundry-portal-only step layered on top of
