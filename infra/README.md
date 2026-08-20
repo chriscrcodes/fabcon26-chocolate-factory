@@ -23,10 +23,12 @@ Fabric together:
   expose that ARM resource), a dedicated workspace on it, Eventhouse, KQL
   Database, the Fabric Connection to the Event Hub, the Eventstream item
   itself (built from `fabric/eventhouse/eventstream.json`), a Lakehouse
-  holding the ontology's dimension tables *and* the `foundry/kb/*.md`
-  knowledge-base docs, a Fabric SQL Database holding the Supply
-  Chain/ERP tables, a Fabric IQ Ontology (preview) bound across the
-  Eventhouse and Lakehouse, a workspace role assignment granting the
+  holding the ontology's dimension tables, a mirror of the Supply
+  Chain/ERP tables (for Ontology binding — see below), *and* the
+  `foundry/kb/*.md` knowledge-base docs, a Fabric SQL Database holding
+  the authoritative Supply Chain/ERP tables, a Fabric IQ Ontology
+  (preview) bound across the Eventhouse and Lakehouse, a workspace role
+  assignment granting the
   Azure AI Search service (`azure.tf`) Contributor so its OneLake
   indexer can read the Lakehouse, and `null_resource`s (`hashicorp/null`
   provider) that deploy the Bronze/Silver/Gold KQL, the dimension

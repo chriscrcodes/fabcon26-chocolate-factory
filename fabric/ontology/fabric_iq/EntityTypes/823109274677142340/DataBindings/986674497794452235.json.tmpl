@@ -1,0 +1,34 @@
+{
+  "id": "986674497794452235",
+  "dataBindingConfiguration": {
+    "dataBindingType": "NonTimeSeries",
+    "propertyBindings": [
+      {
+        "sourceColumnName": "CustomerId",
+        "targetPropertyId": "978373791517976409"
+      },
+      {
+        "sourceColumnName": "Name",
+        "targetPropertyId": "26972760918660348"
+      },
+      {
+        "sourceColumnName": "Country",
+        "targetPropertyId": "849708793899545211"
+      },
+      {
+        "sourceColumnName": "Segment",
+        "targetPropertyId": "964256708881824872"
+      },
+      {
+        "sourceColumnName": "CreditLimit",
+        "targetPropertyId": "716517083979796128"
+      }
+    ],
+    "sourceTableProperties": {
+      "sourceType": "LakehouseTable",
+      "workspaceId": "{{ .WorkspaceId }}",
+      "itemId": "{{ .LakehouseId }}",
+      "sourceTableName": "customer"
+    }
+  }
+}

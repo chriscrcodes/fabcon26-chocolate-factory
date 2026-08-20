@@ -24,9 +24,11 @@ streamed, per the medallion-layers memo's two-plane design.
 - [`fabric/ontology/`](fabric/ontology) — chocolate scenario:
   `ontology_config.json` (all 3 agent domains), dimension
   `tables/*.csv`, `farm-preparation.md`. Deployed as a real **Fabric IQ
-  Ontology** item (preview), bound to the live Eventhouse and a small
-  dimension Lakehouse — see `fabric/ontology/README.md`'s "Deploying to
-  Fabric IQ" section.
+  Ontology** item (preview), bound across the live Eventhouse and a
+  Lakehouse (holding Factory/Quality's dimension tables and all 9
+  Supply Chain/ERP tables, mirrored from the Fabric SQL Database since
+  the Ontology has no direct SQL Database binding) — see
+  `fabric/ontology/README.md`'s "Deploying to Fabric IQ" section.
 - [`fabric/eventhouse/`](fabric/eventhouse) — Bronze/Silver/Gold KQL for
   the Eventhouse: raw ingestion tables, per-stage Silver pivots +
   dimension joins, and Gold rollups (one materialized view, three

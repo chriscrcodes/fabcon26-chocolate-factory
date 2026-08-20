@@ -8,9 +8,9 @@ orders, and invoicing.
 > `fabric/sql-database/`) — the customer-segment (Retail/Wholesale/
 > FoodService/DirectToConsumer) and order-status (Draft/Confirmed/
 > Shipped/Delivered/Cancelled) vocabularies are what
-> `simulator/src/business_data.py` settled on. Not yet bound
-> into the Fabric IQ Ontology (see `fabric/ontology/README.md`'s "Not yet
-> built").
+> `simulator/src/business_data.py` settled on. Also bound into the
+> Fabric IQ Ontology, mirrored into the dimension Lakehouse (see
+> `fabric/ontology/README.md`'s "Deploying to Fabric IQ").
 
 ## Products
 

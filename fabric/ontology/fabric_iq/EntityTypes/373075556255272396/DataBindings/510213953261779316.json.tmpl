@@ -1,0 +1,38 @@
+{
+  "id": "510213953261779316",
+  "dataBindingConfiguration": {
+    "dataBindingType": "NonTimeSeries",
+    "propertyBindings": [
+      {
+        "sourceColumnName": "InvoiceId",
+        "targetPropertyId": "87538598629136600"
+      },
+      {
+        "sourceColumnName": "OrderId",
+        "targetPropertyId": "329423140588420373"
+      },
+      {
+        "sourceColumnName": "IssueDate",
+        "targetPropertyId": "8303267878624271"
+      },
+      {
+        "sourceColumnName": "DueDate",
+        "targetPropertyId": "1097588985612785019"
+      },
+      {
+        "sourceColumnName": "AmountDue",
+        "targetPropertyId": "837736581461617478"
+      },
+      {
+        "sourceColumnName": "PaidDate",
+        "targetPropertyId": "386734244283286963"
+      }
+    ],
+    "sourceTableProperties": {
+      "sourceType": "LakehouseTable",
+      "workspaceId": "{{ .WorkspaceId }}",
+      "itemId": "{{ .LakehouseId }}",
+      "sourceTableName": "invoice"
+    }
+  }
+}

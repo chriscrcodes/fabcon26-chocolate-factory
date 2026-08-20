@@ -1,0 +1,38 @@
+{
+  "id": "938935066675005714",
+  "dataBindingConfiguration": {
+    "dataBindingType": "NonTimeSeries",
+    "propertyBindings": [
+      {
+        "sourceColumnName": "OrderId",
+        "targetPropertyId": "306451690065095366"
+      },
+      {
+        "sourceColumnName": "CustomerId",
+        "targetPropertyId": "989889390473765184"
+      },
+      {
+        "sourceColumnName": "OrderDate",
+        "targetPropertyId": "18307496728436225"
+      },
+      {
+        "sourceColumnName": "Status",
+        "targetPropertyId": "950670216763141264"
+      },
+      {
+        "sourceColumnName": "TotalAmount",
+        "targetPropertyId": "713880107395717151"
+      },
+      {
+        "sourceColumnName": "Currency",
+        "targetPropertyId": "546813373310787227"
+      }
+    ],
+    "sourceTableProperties": {
+      "sourceType": "LakehouseTable",
+      "workspaceId": "{{ .WorkspaceId }}",
+      "itemId": "{{ .LakehouseId }}",
+      "sourceTableName": "sales_order"
+    }
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "id": "961098773417100251",
+  "dataBindingConfiguration": {
+    "dataBindingType": "NonTimeSeries",
+    "propertyBindings": [
+      {
+        "sourceColumnName": "ShipmentId",
+        "targetPropertyId": "589487649521115873"
+      },
+      {
+        "sourceColumnName": "FromFactoryId",
+        "targetPropertyId": "970820854008023956"
+      },
+      {
+        "sourceColumnName": "ToLocationId",
+        "targetPropertyId": "596681400779294838"
+      },
+      {
+        "sourceColumnName": "BatchId",
+        "targetPropertyId": "328526824589566442"
+      },
+      {
+        "sourceColumnName": "Carrier",
+        "targetPropertyId": "723685010036975527"
+      },
+      {
+        "sourceColumnName": "DepartDate",
+        "targetPropertyId": "706489914468364989"
+      },
+      {
+        "sourceColumnName": "ArriveDate",
+        "targetPropertyId": "250057510428031778"
+      },
+      {
+        "sourceColumnName": "Status",
+        "targetPropertyId": "1085472032875993447"
+      }
+    ],
+    "sourceTableProperties": {
+      "sourceType": "LakehouseTable",
+      "workspaceId": "{{ .WorkspaceId }}",
+      "itemId": "{{ .LakehouseId }}",
+      "sourceTableName": "shipment"
+    }
+  }
+}

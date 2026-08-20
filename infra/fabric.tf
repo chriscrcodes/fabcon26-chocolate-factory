@@ -268,6 +268,15 @@ resource "null_resource" "load_dimension_tables" {
         "${path.module}/../fabric/ontology/tables/production_line.csv",
         "${path.module}/../fabric/ontology/tables/production_stage.csv",
         "${path.module}/../fabric/ontology/tables/recipe.csv",
+        "${path.module}/../fabric/ontology/tables/supplier.csv",
+        "${path.module}/../fabric/ontology/tables/material.csv",
+        "${path.module}/../fabric/ontology/tables/inventory.csv",
+        "${path.module}/../fabric/ontology/tables/shipment.csv",
+        "${path.module}/../fabric/ontology/tables/customer.csv",
+        "${path.module}/../fabric/ontology/tables/product.csv",
+        "${path.module}/../fabric/ontology/tables/sales_order.csv",
+        "${path.module}/../fabric/ontology/tables/order_line.csv",
+        "${path.module}/../fabric/ontology/tables/invoice.csv",
         "${path.module}/../fabric/ontology/deploy_dimension_lakehouse.py",
       ] : filesha256(f)
     ]))

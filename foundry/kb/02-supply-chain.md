@@ -7,8 +7,9 @@ inventory, and shipments.
 > tables are seeded and deployed to a Fabric SQL Database (see
 > `fabric/sql-database/`) — the shipment status vocabulary (Pending/
 > InTransit/Delivered) is what `simulator/src/business_data.py`
-> settled on. Not yet bound into the Fabric IQ Ontology (see
-> `fabric/ontology/README.md`'s "Not yet built").
+> settled on. Also bound into the Fabric IQ Ontology, mirrored into the
+> dimension Lakehouse (see `fabric/ontology/README.md`'s "Deploying to
+> Fabric IQ").
 
 ## Materials
 

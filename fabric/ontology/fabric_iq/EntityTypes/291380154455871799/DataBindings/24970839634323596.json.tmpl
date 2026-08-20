@@ -1,0 +1,38 @@
+{
+  "id": "24970839634323596",
+  "dataBindingConfiguration": {
+    "dataBindingType": "NonTimeSeries",
+    "propertyBindings": [
+      {
+        "sourceColumnName": "MaterialId",
+        "targetPropertyId": "1151932460490019255"
+      },
+      {
+        "sourceColumnName": "SupplierId",
+        "targetPropertyId": "849216093463932829"
+      },
+      {
+        "sourceColumnName": "Type",
+        "targetPropertyId": "876765426927635907"
+      },
+      {
+        "sourceColumnName": "LotNumber",
+        "targetPropertyId": "380110882465642746"
+      },
+      {
+        "sourceColumnName": "ReceivedDate",
+        "targetPropertyId": "361443764853869992"
+      },
+      {
+        "sourceColumnName": "QuantityKg",
+        "targetPropertyId": "612369438747651400"
+      }
+    ],
+    "sourceTableProperties": {
+      "sourceType": "LakehouseTable",
+      "workspaceId": "{{ .WorkspaceId }}",
+      "itemId": "{{ .LakehouseId }}",
+      "sourceTableName": "material"
+    }
+  }
+}

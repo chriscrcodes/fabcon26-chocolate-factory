@@ -54,9 +54,18 @@ needed here):
   into `fabric_iq/`.
 - [`deploy_dimension_lakehouse.py`](deploy_dimension_lakehouse.py) loads
   `tables/*.csv` into a Lakehouse as real Delta tables (via the OneLake
-  DFS API + the Lakehouse "Load Table" API) — the dimension entities
-  (`factory`, `production_line`, `production_stage`, `recipe`) bind here
-  rather than the Eventhouse, since Eventhouse bindings are TimeSeries-only.
+  DFS API + the Lakehouse "Load Table" API) — Factory/Quality's
+  dimension entities (`factory`, `production_line`, `production_stage`,
+  `recipe`) bind here rather than the Eventhouse, since Eventhouse
+  bindings are TimeSeries-only, and all 9 Supply Chain/ERP tables
+  (`supplier`, `material`, `inventory`, `shipment`, `customer`,
+  `product`, `sales_order`, `order_line`, `invoice`) are mirrored into
+  the same Lakehouse for the same reason — the Ontology definition
+  schema has no `SqlDatabaseTable`/`WarehouseTable` sourceType, only
+  `LakehouseTable` and `KustoTable` (Eventhouse, TimeSeries-only). The
+  Fabric SQL Database (`fabric/sql-database/`) stays the actual system
+  of record; this Lakehouse copy exists solely to satisfy the
+  Ontology's binding format.
 - [`deploy_fabric_iq_ontology.py`](deploy_fabric_iq_ontology.py) deploys
   the generated definition via direct Fabric REST calls (not the
   `fabric_ontology` Terraform resource — verified live that
@@ -65,24 +74,11 @@ needed here):
 
 All three are wired into `infra/fabric.tf` as `null_resource`s and
 run automatically on `terraform apply` — see `infra/README.md`.
-7 of 8 Factory/Quality entities are bound so far (`sensor_reading` is
-EAV-shaped and still deferred); see
-[`generate_fabric_iq_definition.py`](generate_fabric_iq_definition.py)'s
-docstring for the exact constraints found live and what's left
-(remaining relationship instances, Supply Chain/ERP domains).
-
-## Not yet built
-
-Supply Chain (`supplier`, `material`, `inventory`, `shipment`) and
-ERP/Orders (`customer`, `product`, `sales_order`, `order_line`, `invoice`)
-have seed data (`simulator/src/business_data.py`) and a
-Fabric SQL Database (`fabric/sql-database/`), but aren't bound into the
-Fabric IQ Ontology yet — only the Factory/Quality domain (streamed to
-the Eventhouse, plus its 4 dimension tables above) is wired up and bound
-so far. Binding a Fabric SQL Database as an ontology data source hasn't
-been attempted; the ontology-definition schema's `sourceType` options
-found so far are `KustoTable` and `LakehouseTable` only (see
-`generate_fabric_iq_definition.py`'s docstring), so this may need the
-Supply Chain/ERP data mirrored into the dimension Lakehouse instead of
-the SQL Database, or a different binding mechanism entirely — not
-verified live yet.
+7 of Factory/Quality's 8 entities, plus all 9 Supply Chain/ERP entities
+(16 total), are bound; 11 of the 17 relationship types have real
+Contextualization instances, including the cross-domain
+`shipment_to_batch` link. `sensor_reading` is still deferred (EAV-shaped);
+see [`generate_fabric_iq_definition.py`](generate_fabric_iq_definition.py)'s
+docstring for the exact constraints found live and what's left (the
+remaining 6 Factory/Quality relationship instances, which need an
+Eventhouse → Lakehouse export).

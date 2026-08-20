@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Generate a Fabric IQ Ontology item definition (EntityTypes/DataBindings/
-RelationshipTypes) from ontology_config.json, for the Factory/Quality
-domain bound to the live Eventhouse + a small dimension Lakehouse.
+RelationshipTypes) from ontology_config.json, covering Factory/Quality
+(bound to the live Eventhouse) and Supply Chain/ERP (bound to a shared
+dimension Lakehouse, alongside Factory/Quality's own dimension tables).
 
 Schema verified against
 https://learn.microsoft.com/en-us/rest/api/fabric/articles/item-management/definitions/ontology-definition
@@ -12,8 +13,9 @@ of the name), so re-running this generator against an unchanged
 ontology_config.json produces byte-identical output -- matching
 generate_rdf.py's determinism.
 
-7 of the 8 Factory/Quality entities are bound here. Two real constraints
-found live shape which source each uses:
+7 of Factory/Quality's 8 entities, plus all 9 Supply Chain/ERP entities,
+are bound here. Two real constraints found live shape which source each
+uses:
 
 - `EventhouseTableDataBindingProperties` (`sourceType: KustoTable`) is
   **only accepted when `dataBindingType` is `TimeSeries`** -- a bare
@@ -30,11 +32,18 @@ found live shape which source each uses:
   properties. Entity keys can only reference static properties.").
 
 So: `batch`, `quality_check`, `line_status` (genuinely time-indexed) bind
-to the Eventhouse as TimeSeries; `factory`, `production_line`,
-`production_stage`, `recipe` (genuine dimension data, no timestamp
-column) bind to a small Lakehouse
-(`fabric/ontology/deploy_dimension_lakehouse.py` loads them from
-fabric/ontology/tables/*.csv as real Delta tables) as NonTimeSeries.
+to the Eventhouse as TimeSeries; everything else -- Factory/Quality's
+dimension tables (`factory`, `production_line`, `production_stage`,
+`recipe`) and all of Supply Chain/ERP (`supplier`, `material`,
+`inventory`, `shipment`, `customer`, `product`, `sales_order`,
+`order_line`, `invoice`) -- binds NonTimeSeries via LakehouseTable.
+There is no `SqlDatabaseTable`/`WarehouseTable` sourceType in the
+schema, so Supply Chain/ERP's tables (whose CSVs already exist as the
+seed source for the Fabric SQL Database) are mirrored into this same
+Lakehouse purely to satisfy the Ontology's binding format --
+`fabric/ontology/deploy_dimension_lakehouse.py` loads all of it (both
+groups) from fabric/ontology/tables/*.csv as real Delta tables. The
+Fabric SQL Database stays the actual system of record.
 
 `sensor_reading` is still deferred -- EAV shaped, and its source table's
 Timestamp column is string, not datetime (see
@@ -43,15 +52,21 @@ fabric/eventhouse/README.md's "Verified against a live tenant" section).
 Relationship *instances* (`RelationshipTypes/*/Contextualizations`) need
 a `LakehouseTableDataBindingProperties` source regardless of which
 entities they relate -- an Eventhouse table can't be a relationship
-source at all. Only `line_to_factory` (production_line -> factory, both
-Lakehouse-bound) gets an instance here, reusing production_line's own
-table as the join source (it already carries both LineId and FactoryId
-in one row, so no separate bridge table is needed). The other
-relationships that touch an Eventhouse-bound entity
+source at all (dataBindingTable is always the table owning the FK
+column pair, i.e. the relationship's "from" table). Since every Supply
+Chain/ERP table is Lakehouse-bound, all 10 of their relationships
+qualify -- including `shipment_to_batch`, a genuine cross-domain link
+(shipment owns the BatchId FK; `batch` being Eventhouse-bound only
+rules it out as a *source*, not as a target). Only `line_to_factory`
+qualifies on the Factory/Quality side (production_line -> factory, both
+Lakehouse-bound), reusing production_line's own table as the join
+source (it already carries both LineId and FactoryId in one row, so no
+separate bridge table is needed). The remaining Factory/Quality
+relationships all have an Eventhouse-bound "from" table
 (batch_to_line/batch_to_recipe/check_to_line/check_to_stage/
-line_status_to_line/check_to_batch) are declared as types only --
-wiring their instances needs an Eventhouse -> Lakehouse export, which is
-a bigger follow-up, not attempted here.
+line_status_to_line/check_to_batch) and stay type-only -- wiring their
+instances needs an Eventhouse -> Lakehouse export, a bigger follow-up
+not attempted here.
 
 Usage: uv run generate_fabric_iq_definition.py
 Output: fabric/ontology/fabric_iq/ (definition.json, EntityTypes/, RelationshipTypes/)
@@ -76,11 +91,29 @@ EVENTHOUSE_BINDINGS = {
 
 # Table name -> source table (same name as the Delta table loaded by
 # deploy_dimension_lakehouse.py). NonTimeSeries, bound via LakehouseTable.
+# Supply Chain/ERP tables are mirrored into the same Lakehouse for the
+# same reason the dimension tables are: the Ontology definition schema
+# has exactly two sourceType options (LakehouseTable, KustoTable/
+# Eventhouse-TimeSeries-only) -- no SqlDatabaseTable/WarehouseTable type
+# exists (checked against
+# https://learn.microsoft.com/en-us/rest/api/fabric/articles/item-management/definitions/ontology-definition
+# and https://learn.microsoft.com/en-us/fabric/iq/ontology/how-to-bind-data).
+# The Fabric SQL Database remains the actual system of record; this
+# mirror exists solely to satisfy the Ontology's binding format.
 LAKEHOUSE_BINDINGS = {
     "factory": "factory",
     "production_line": "production_line",
     "production_stage": "production_stage",
     "recipe": "recipe",
+    "supplier": "supplier",
+    "material": "material",
+    "inventory": "inventory",
+    "shipment": "shipment",
+    "customer": "customer",
+    "product": "product",
+    "sales_order": "sales_order",
+    "order_line": "order_line",
+    "invoice": "invoice",
 }
 
 # Live columns per source table. Eventhouse ones verified via
@@ -88,8 +121,17 @@ LAKEHOUSE_BINDINGS = {
 # ontology_config.json's abstract columns in places (e.g.
 # silver_quality_check's LineName/FactoryCode enrichment), narrower in
 # others (e.g. silver_batch has no QuantityKg/Status). Lakehouse ones
-# match ontology_config.json exactly, since they're loaded verbatim from
-# the same CSVs.
+# are verified against the real Delta schema Spark's CSV auto-inference
+# produced (read from each table's _delta_log, not guessed/assumed from
+# ontology_config.json's abstract types) -- two surprises this uncovered:
+# customer.CreditLimit infers as an integer (every generated value
+# happens to be a round number, e.g. 10000, so the CSV never has a
+# decimal point), and every *Date column infers as a bare date, not a
+# timestamp (business_data.py writes `date.isoformat()`, no time
+# component). The Ontology valueType enum has no separate Date/Int32
+# type (only String/Boolean/DateTime/Object/BigInt/Double), so both map
+# to DateTime and BigInt respectively -- the same two types already
+# used elsewhere.
 LIVE_COLUMNS = {
     "silver_batch": {"BatchId": "String", "LineId": "String", "RecipeId": "String", "StartTime": "DateTime", "EndTime": "DateTime"},
     "silver_quality_check": {"Timestamp": "DateTime", "CheckId": "String", "BatchId": "String", "LineId": "String", "LineName": "String", "FactoryId": "String", "FactoryCode": "String", "StageId": "String", "StageName": "String", "Phase": "String", "DefectRate": "Double", "Result": "String", "Notes": "String"},
@@ -98,6 +140,15 @@ LIVE_COLUMNS = {
     "production_line": {"LineId": "String", "FactoryId": "String", "LineNumber": "BigInt", "Name": "String"},
     "production_stage": {"StageId": "String", "Phase": "String", "Name": "String", "SequenceOrder": "BigInt"},
     "recipe": {"RecipeId": "String", "Name": "String", "CacaoPercent": "Double", "MilkPercent": "Double", "SugarPercent": "Double"},
+    "supplier": {"SupplierId": "String", "Name": "String", "Country": "String", "MaterialType": "String", "Rating": "Double"},
+    "material": {"MaterialId": "String", "SupplierId": "String", "Type": "String", "LotNumber": "String", "ReceivedDate": "DateTime", "QuantityKg": "Double"},
+    "inventory": {"InventoryId": "String", "FactoryId": "String", "MaterialId": "String", "QuantityOnHand": "Double", "ReorderLevel": "Double", "LastUpdated": "DateTime"},
+    "shipment": {"ShipmentId": "String", "FromFactoryId": "String", "ToLocationId": "String", "BatchId": "String", "Carrier": "String", "DepartDate": "DateTime", "ArriveDate": "DateTime", "Status": "String"},
+    "customer": {"CustomerId": "String", "Name": "String", "Country": "String", "Segment": "String", "CreditLimit": "BigInt"},
+    "product": {"ProductId": "String", "Name": "String", "RecipeId": "String", "PackagingType": "String", "SKU": "String"},
+    "sales_order": {"OrderId": "String", "CustomerId": "String", "OrderDate": "DateTime", "Status": "String", "TotalAmount": "Double", "Currency": "String"},
+    "order_line": {"OrderLineId": "String", "OrderId": "String", "ProductId": "String", "QuantityKg": "Double", "UnitPrice": "Double"},
+    "invoice": {"InvoiceId": "String", "OrderId": "String", "IssueDate": "DateTime", "DueDate": "DateTime", "AmountDue": "Double", "PaidDate": "DateTime"},
 }
 
 # Preferred display-name column per table (falls back to the key column).
@@ -106,20 +157,29 @@ DISPLAY_NAME_COLUMN = {
     "production_line": "Name",
     "production_stage": "Name",
     "recipe": "Name",
+    "supplier": "Name",
+    "customer": "Name",
+    "product": "Name",
 }
 
-FACTORY_QUALITY_TABLES = list(EVENTHOUSE_BINDINGS) + list(LAKEHOUSE_BINDINGS)
-FACTORY_QUALITY_RELATIONSHIPS = [
-    r
-    for r in CONFIG["relationships"]
-    if r["from"] in FACTORY_QUALITY_TABLES and r["to"] in FACTORY_QUALITY_TABLES
+ALL_TABLES = list(EVENTHOUSE_BINDINGS) + list(LAKEHOUSE_BINDINGS)
+ALL_RELATIONSHIPS = [
+    r for r in CONFIG["relationships"] if r["from"] in ALL_TABLES and r["to"] in ALL_TABLES
 ]
 
-# Relationship instances (Contextualizations) -- see module docstring for
-# why only this one is wired so far. dataBindingTable is the *table
-# owning the FK column pair*, not necessarily either entity's own table
-# in general, but here production_line's own table already carries both.
-CONTEXTUALIZED_RELATIONSHIPS = {"line_to_factory"}
+# Relationship instances (Contextualizations): a relationship gets one
+# whenever its "from" table (the FK owner -- dataBindingTable is always
+# the table owning the FK column pair, not necessarily either entity's
+# own table in general, though it is for every relationship here) is
+# Lakehouse-bound. Eventhouse tables can't be a Contextualization source
+# at all, regardless of which entities they relate -- see module
+# docstring. Since every Supply Chain/ERP table is Lakehouse-bound, all
+# 10 of their relationships qualify, including shipment_to_batch (shipment
+# owns the FK; batch being Eventhouse-bound only matters for *source*
+# tables, not targets).
+CONTEXTUALIZED_RELATIONSHIPS = {
+    rel["name"] for rel in ALL_RELATIONSHIPS if rel["from"] in LAKEHOUSE_BINDINGS
+}
 
 
 def stable_id(name: str) -> str:
@@ -153,9 +213,9 @@ def main() -> None:
 
     write_json(OUT / "definition.json", {})
 
-    entity_type_id = {table: stable_id(table) for table in FACTORY_QUALITY_TABLES}
+    entity_type_id = {table: stable_id(table) for table in ALL_TABLES}
 
-    for table in FACTORY_QUALITY_TABLES:
+    for table in ALL_TABLES:
         table_config = CONFIG["tables"][table]
         is_time_series = table in EVENTHOUSE_BINDINGS
         source_table = (
@@ -240,7 +300,7 @@ def main() -> None:
         )
 
     n_contextualizations = 0
-    for rel in FACTORY_QUALITY_RELATIONSHIPS:
+    for rel in ALL_RELATIONSHIPS:
         rid = stable_id(rel["name"])
         relationship_type = {
             "namespace": "usertypes",
@@ -282,8 +342,8 @@ def main() -> None:
             )
             n_contextualizations += 1
 
-    n_entities = len(FACTORY_QUALITY_TABLES)
-    n_rels = len(FACTORY_QUALITY_RELATIONSHIPS)
+    n_entities = len(ALL_TABLES)
+    n_rels = len(ALL_RELATIONSHIPS)
     print(f"generated {n_entities} entity types + {n_rels} relationship types "
           f"({n_contextualizations} with instance data) -> {OUT}")
     print("(sensor_reading excluded -- EAV shape + string Timestamp, see module docstring)")
