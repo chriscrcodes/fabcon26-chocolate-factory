@@ -1,0 +1,22 @@
+// Enables OneLake availability (mirroring to Delta Parquet) on the
+// Silver tables the Fabric IQ Ontology needs as Contextualization
+// sources -- Eventhouse/KQL tables can't be a relationship source
+// directly (LakehouseTableDataBindingProperties only), so these get
+// mirrored to OneLake, then referenced from the dimension Lakehouse via
+// a shortcut (see deploy_onelake_shortcuts.py).
+//
+// TargetLatencyInMinutes=5 is the minimum allowed -- default is up to
+// 3 hours, configurable 5min-3h. Once mirrored, data updates
+// continuously at that cadence; this is not a one-time snapshot.
+//
+// silver_batch is a materialized view, not a plain table -- left out
+// here; see fabric/eventhouse/README.md for whether/how mirroring
+// applies to it.
+.alter-merge table silver_quality_check policy mirroring dataformat=parquet with (IsEnabled=true, TargetLatencyInMinutes=5);
+.alter-merge table silver_line_status policy mirroring dataformat=parquet with (IsEnabled=true, TargetLatencyInMinutes=5);
+.alter-merge table silver_grinding policy mirroring dataformat=parquet with (IsEnabled=true, TargetLatencyInMinutes=5);
+.alter-merge table silver_mixing_refining policy mirroring dataformat=parquet with (IsEnabled=true, TargetLatencyInMinutes=5);
+.alter-merge table silver_conching policy mirroring dataformat=parquet with (IsEnabled=true, TargetLatencyInMinutes=5);
+.alter-merge table silver_tempering policy mirroring dataformat=parquet with (IsEnabled=true, TargetLatencyInMinutes=5);
+.alter-merge table silver_molding_cooling policy mirroring dataformat=parquet with (IsEnabled=true, TargetLatencyInMinutes=5);
+.alter-merge table silver_packaging policy mirroring dataformat=parquet with (IsEnabled=true, TargetLatencyInMinutes=5);

@@ -50,6 +50,20 @@ queryset instead:
    `.ingest inline into table ref_factory <| ...` per table works for
    local/dev use; a real deployment should use a Fabric pipeline Copy
    activity instead.
+6. **[`04_onelake_mirroring.kql`](04_onelake_mirroring.kql)** enables
+   OneLake availability (mirroring to Delta Parquet) on
+   `silver_quality_check`, `silver_line_status`, and the 6 per-stage
+   tables — so `fabric/ontology/deploy_onelake_shortcuts.py` can expose
+   them as ordinary Lakehouse tables for the Fabric IQ Ontology's
+   relationship instances (Eventhouse tables can never be a
+   Contextualization source directly). `silver_batch` is excluded: it's
+   a materialized view, and the mirroring policy command only accepts
+   `table`, not `materialized-view` (`.alter-merge materialized-view
+   silver_batch policy mirroring ...` fails to parse at all;
+   `.alter-merge table silver_batch policy mirroring ...` returns "the
+   requested endpoint ... does not exist"). See
+   `fabric/ontology/generate_fabric_iq_definition.py`'s docstring for
+   which relationships this leaves type-only.
 
 The `Filter` operator shape here (`operatorType`/`ColumnReference`/
 `Literal`) is taken directly from Microsoft's own
@@ -102,3 +116,12 @@ Two things this pass didn't verify: `gold_factory_oee_daily()`'s
 window (only tested against a few minutes of live data), and Gold
 functions' behavior once `join` columns actually collide across Silver
 tables at scale.
+
+**OneLake mirroring latency**: `TargetLatencyInMinutes=5` is a target,
+not a guarantee — Microsoft's own docs cite up to 3 hours in the worst
+case. Enabling the policy and creating the shortcut both succeed
+immediately and the table's schema appears in OneLake right away, but
+the first real data commit can take noticeably longer than 5 minutes in
+practice; query the shortcut's row count (or check for `.parquet` files
+under `Tables/<name>/` via the OneLake DFS API) rather than assuming
+data is present immediately after enabling.

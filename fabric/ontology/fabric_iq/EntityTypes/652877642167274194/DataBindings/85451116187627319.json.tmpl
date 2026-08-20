@@ -1,0 +1,57 @@
+{
+  "id": "85451116187627319",
+  "dataBindingConfiguration": {
+    "dataBindingType": "TimeSeries",
+    "timestampColumnName": "Timestamp",
+    "propertyBindings": [
+      {
+        "sourceColumnName": "Timestamp",
+        "targetPropertyId": "1053876545885150778"
+      },
+      {
+        "sourceColumnName": "LineId",
+        "targetPropertyId": "1015872119408526570"
+      },
+      {
+        "sourceColumnName": "LineName",
+        "targetPropertyId": "251034001751259363"
+      },
+      {
+        "sourceColumnName": "FactoryId",
+        "targetPropertyId": "829046606375898949"
+      },
+      {
+        "sourceColumnName": "FactoryCode",
+        "targetPropertyId": "667592539727502775"
+      },
+      {
+        "sourceColumnName": "StageId",
+        "targetPropertyId": "917673685529735682"
+      },
+      {
+        "sourceColumnName": "BatchId",
+        "targetPropertyId": "1069766872403205976"
+      },
+      {
+        "sourceColumnName": "TemperatureC",
+        "targetPropertyId": "47327583640147530"
+      },
+      {
+        "sourceColumnName": "CrystalFormIndex",
+        "targetPropertyId": "274897896580939038"
+      },
+      {
+        "sourceColumnName": "ViscosityPaS",
+        "targetPropertyId": "316627625814540723"
+      }
+    ],
+    "sourceTableProperties": {
+      "sourceType": "KustoTable",
+      "workspaceId": "{{ .WorkspaceId }}",
+      "itemId": "{{ .EventhouseId }}",
+      "clusterUri": "{{ .ClusterUri }}",
+      "databaseName": "{{ .DatabaseName }}",
+      "sourceTableName": "silver_tempering"
+    }
+  }
+}

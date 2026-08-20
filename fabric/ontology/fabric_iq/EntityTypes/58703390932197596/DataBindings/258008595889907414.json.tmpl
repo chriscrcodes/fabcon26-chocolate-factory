@@ -1,0 +1,57 @@
+{
+  "id": "258008595889907414",
+  "dataBindingConfiguration": {
+    "dataBindingType": "TimeSeries",
+    "timestampColumnName": "Timestamp",
+    "propertyBindings": [
+      {
+        "sourceColumnName": "Timestamp",
+        "targetPropertyId": "651664544413553125"
+      },
+      {
+        "sourceColumnName": "LineId",
+        "targetPropertyId": "530486392986044874"
+      },
+      {
+        "sourceColumnName": "LineName",
+        "targetPropertyId": "9540916573305746"
+      },
+      {
+        "sourceColumnName": "FactoryId",
+        "targetPropertyId": "125048484047719370"
+      },
+      {
+        "sourceColumnName": "FactoryCode",
+        "targetPropertyId": "468138765277493498"
+      },
+      {
+        "sourceColumnName": "StageId",
+        "targetPropertyId": "461115722156777689"
+      },
+      {
+        "sourceColumnName": "BatchId",
+        "targetPropertyId": "300809194931939227"
+      },
+      {
+        "sourceColumnName": "TemperatureC",
+        "targetPropertyId": "174105457286520739"
+      },
+      {
+        "sourceColumnName": "MoisturePercent",
+        "targetPropertyId": "856302764796884029"
+      },
+      {
+        "sourceColumnName": "AcidityPH",
+        "targetPropertyId": "847908256591769905"
+      }
+    ],
+    "sourceTableProperties": {
+      "sourceType": "KustoTable",
+      "workspaceId": "{{ .WorkspaceId }}",
+      "itemId": "{{ .EventhouseId }}",
+      "clusterUri": "{{ .ClusterUri }}",
+      "databaseName": "{{ .DatabaseName }}",
+      "sourceTableName": "silver_conching"
+    }
+  }
+}

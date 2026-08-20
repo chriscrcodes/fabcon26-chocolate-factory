@@ -13,8 +13,9 @@ of the name), so re-running this generator against an unchanged
 ontology_config.json produces byte-identical output -- matching
 generate_rdf.py's determinism.
 
-7 of Factory/Quality's 8 entities, plus all 9 Supply Chain/ERP entities,
-are bound here. Two real constraints found live shape which source each
+All of Factory/Quality's 8 entities (`sensor_reading` realized as 6
+per-stage entities, see below) and all 9 Supply Chain/ERP entities are
+bound here. Two real constraints found live shape which source each
 uses:
 
 - `EventhouseTableDataBindingProperties` (`sourceType: KustoTable`) is
@@ -31,42 +32,71 @@ uses:
   ("Entity keys cannot be specified when the entity type has no static
   properties. Entity keys can only reference static properties.").
 
-So: `batch`, `quality_check`, `line_status` (genuinely time-indexed) bind
-to the Eventhouse as TimeSeries; everything else -- Factory/Quality's
-dimension tables (`factory`, `production_line`, `production_stage`,
-`recipe`) and all of Supply Chain/ERP (`supplier`, `material`,
-`inventory`, `shipment`, `customer`, `product`, `sales_order`,
-`order_line`, `invoice`) -- binds NonTimeSeries via LakehouseTable.
-There is no `SqlDatabaseTable`/`WarehouseTable` sourceType in the
-schema, so Supply Chain/ERP's tables (whose CSVs already exist as the
-seed source for the Fabric SQL Database) are mirrored into this same
-Lakehouse purely to satisfy the Ontology's binding format --
+So: `batch`, `quality_check`, `line_status`, and the 6 `sensor_reading_*`
+stage entities (all genuinely time-indexed) bind to the Eventhouse as
+TimeSeries; everything else -- Factory/Quality's dimension tables
+(`factory`, `production_line`, `production_stage`, `recipe`) and all of
+Supply Chain/ERP (`supplier`, `material`, `inventory`, `shipment`,
+`customer`, `product`, `sales_order`, `order_line`, `invoice`) -- binds
+NonTimeSeries via LakehouseTable. There is no
+`SqlDatabaseTable`/`WarehouseTable` sourceType in the schema, so Supply
+Chain/ERP's tables (whose CSVs already exist as the seed source for the
+Fabric SQL Database) are mirrored into this same Lakehouse purely to
+satisfy the Ontology's binding format --
 `fabric/ontology/deploy_dimension_lakehouse.py` loads all of it (both
 groups) from fabric/ontology/tables/*.csv as real Delta tables. The
 Fabric SQL Database stays the actual system of record.
 
-`sensor_reading` is still deferred -- EAV shaped, and its source table's
-Timestamp column is string, not datetime (see
-fabric/eventhouse/README.md's "Verified against a live tenant" section).
+`sensor_reading` (ontology_config.json's single abstract EAV table) has
+no direct binding -- entities need static-named properties, which an
+EAV row (one per metric per tick) can't provide. `fabric/eventhouse/
+02_silver.kql` already pivots it into 6 per-stage tables for KQL
+consumers; this generator binds those 6 as 6 distinct TimeSeries entity
+types instead (`STAGE_READING_TABLES`/`STAGE_METRIC_COLUMNS`), each
+keyed by `LineId` alone -- the pivot leaves no per-reading ID column, so
+identity here is "this line's readings at this stage over time," not a
+discrete per-event ID like `batch`/`quality_check`/`line_status` use.
 
 Relationship *instances* (`RelationshipTypes/*/Contextualizations`) need
 a `LakehouseTableDataBindingProperties` source regardless of which
-entities they relate -- an Eventhouse table can't be a relationship
-source at all (dataBindingTable is always the table owning the FK
-column pair, i.e. the relationship's "from" table). Since every Supply
-Chain/ERP table is Lakehouse-bound, all 10 of their relationships
-qualify -- including `shipment_to_batch`, a genuine cross-domain link
-(shipment owns the BatchId FK; `batch` being Eventhouse-bound only
-rules it out as a *source*, not as a target). Only `line_to_factory`
-qualifies on the Factory/Quality side (production_line -> factory, both
-Lakehouse-bound), reusing production_line's own table as the join
-source (it already carries both LineId and FactoryId in one row, so no
-separate bridge table is needed). The remaining Factory/Quality
-relationships all have an Eventhouse-bound "from" table
-(batch_to_line/batch_to_recipe/check_to_line/check_to_stage/
-line_status_to_line/check_to_batch) and stay type-only -- wiring their
-instances needs an Eventhouse -> Lakehouse export, a bigger follow-up
-not attempted here.
+entities they relate -- an Eventhouse table can never be a
+Contextualization source *directly* (`dataBindingTable` is always the
+table owning the FK column pair, i.e. the relationship's "from" table).
+Two ways a table clears this bar, tracked by `data_binding_source_table()`:
+natively Lakehouse-bound (every Supply Chain/ERP table, plus
+`production_line`/`factory`/`production_stage`/`recipe`), or
+Eventhouse-bound with OneLake availability enabled
+(`fabric/eventhouse/04_onelake_mirroring.kql`) and a matching Lakehouse
+shortcut (`deploy_onelake_shortcuts.py`) -- covers `quality_check`,
+`line_status`, and all 6 `sensor_reading_*` stage entities. Only `batch`
+stays without a path to instance data: its source, `silver_batch`, is a
+materialized view, and `.alter-merge table silver_batch policy
+mirroring ...` fails live (the materialized-view variant of the command
+doesn't parse); `batch_to_line` and `batch_to_recipe` are the two
+relationships this leaves type-only. Converting the materialized view
+into a form OneLake availability supports is a bigger follow-up, not
+attempted here.
+
+`sourceKeyRefBindings`/`targetKeyRefBindings` semantics (verified
+against Microsoft Learn's own Contextualization example, a `contains`
+RelationshipType joining two Equipment entities): each array names the
+`dataBindingTable` column holding *that side's own key value*, mapped
+to that side's key property -- not "the source table's column, mapped
+to whichever property," and not keyed by the relationship's `fromKey`/
+`toKey` naming symmetrically. Since `dataBindingTable` here is always
+the "from" entity's own table, `sourceKeyRefBindings` is the trivial
+case (the table's own key column, identifying itself), while
+`targetKeyRefBindings` uses `rel["fromKey"]` -- the actual FK column
+name present in that table, which is not always identical to
+`rel["toKey"]` (`shipment_to_factory`'s FK column is `FromFactoryId`,
+but `toKey` is `FactoryId` -- `shipment` has no column literally named
+`FactoryId`). An earlier version of this code used `rel["fromKey"]`/
+`rel["toKey"]` directly for both sides, which happened to produce valid
+column references for every relationship where `fromKey == toKey`
+(true almost everywhere in this config) but would have silently
+generated a nonexistent column reference for `shipment_to_factory` --
+caught only by re-deriving the semantics from Microsoft's own example,
+not by anything erroring at deploy time.
 
 Usage: uv run generate_fabric_iq_definition.py
 Output: fabric/ontology/fabric_iq/ (definition.json, EntityTypes/, RelationshipTypes/)
@@ -83,11 +113,59 @@ OUT = HERE / "fabric_iq"
 
 # Table name -> (source table, timestamp column). TimeSeries, bound to
 # the Eventhouse via KustoTable.
+#
+# sensor_reading (ontology_config.json's abstract EAV table -- one row
+# per metric per tick) has no direct Fabric IQ binding: entities need
+# static-named properties, and Fabric IQ's own docs restrict a bound
+# table to well-known columns, neither of which an EAV shape provides.
+# fabric/eventhouse/02_silver.kql already solves exactly this for KQL
+# consumers -- 6 per-stage tables, each pivoting sensor_reading's
+# Metric/Value pairs into named columns for that stage's 3 metrics --
+# so this generator binds those 6 pivoted tables as 6 distinct entity
+# types instead of fighting the EAV shape. They don't exist in
+# ontology_config.json (whose single "sensor_reading" row is the
+# EAV-shape abstraction, unrealizable directly); STAGE_READING_TABLES/
+# STAGE_METRIC_COLUMNS below are this generator's own addition, same
+# as LIVE_COLUMNS already diverging from ontology_config.json's
+# abstract columns for silver_quality_check's enrichment columns.
+#
+# Each pivoted table has no surviving per-reading ID column (pivot
+# collapses multiple EAV rows into one wide row per LineId+Timestamp),
+# so unlike batch/quality_check/line_status (each keyed by a genuine
+# per-event ID), these are keyed by LineId alone -- "this line's
+# readings at this stage over time," the natural TimeSeries shape for
+# continuous sensor telemetry (as opposed to discrete events).
+STAGE_READING_TABLES = [
+    "grinding",
+    "mixing_refining",
+    "conching",
+    "tempering",
+    "molding_cooling",
+    "packaging",
+]
+STAGE_METRIC_COLUMNS = {
+    "grinding": {"ParticleSizeMicron": "Double", "MotorTemperatureC": "Double", "ThroughputKgPerHr": "Double"},
+    "mixing_refining": {"ParticleSizeMicron": "Double", "RollerTemperatureC": "Double", "ViscosityPaS": "Double"},
+    "conching": {"TemperatureC": "Double", "MoisturePercent": "Double", "AcidityPH": "Double"},
+    "tempering": {"TemperatureC": "Double", "CrystalFormIndex": "Double", "ViscosityPaS": "Double"},
+    "molding_cooling": {"MoldTemperatureC": "Double", "TunnelTemperatureC": "Double", "VibrationHz": "Double"},
+    "packaging": {"LineSpeedUnitsPerMin": "Double", "SealTemperatureC": "Double", "RejectRatePercent": "Double"},
+}
+
 EVENTHOUSE_BINDINGS = {
     "batch": ("silver_batch", "StartTime"),
     "quality_check": ("silver_quality_check", "Timestamp"),
     "line_status": ("silver_line_status", "Timestamp"),
+    **{
+        f"sensor_reading_{stage}": (f"silver_{stage}", "Timestamp")
+        for stage in STAGE_READING_TABLES
+    },
 }
+
+# Key column for tables with no ontology_config.json entry (the 6
+# per-stage reading tables above) -- everything else uses
+# CONFIG["tables"][table]["key"], see key_column() below.
+KEY_COLUMN_OVERRIDES = {f"sensor_reading_{stage}": "LineId" for stage in STAGE_READING_TABLES}
 
 # Table name -> source table (same name as the Delta table loaded by
 # deploy_dimension_lakehouse.py). NonTimeSeries, bound via LakehouseTable.
@@ -149,6 +227,19 @@ LIVE_COLUMNS = {
     "sales_order": {"OrderId": "String", "CustomerId": "String", "OrderDate": "DateTime", "Status": "String", "TotalAmount": "Double", "Currency": "String"},
     "order_line": {"OrderLineId": "String", "OrderId": "String", "ProductId": "String", "QuantityKg": "Double", "UnitPrice": "Double"},
     "invoice": {"InvoiceId": "String", "OrderId": "String", "IssueDate": "DateTime", "DueDate": "DateTime", "AmountDue": "Double", "PaidDate": "DateTime"},
+    **{
+        f"silver_{stage}": {
+            "Timestamp": "DateTime",
+            "LineId": "String",
+            "LineName": "String",
+            "FactoryId": "String",
+            "FactoryCode": "String",
+            "StageId": "String",
+            "BatchId": "String",
+            **metrics,
+        }
+        for stage, metrics in STAGE_METRIC_COLUMNS.items()
+    },
 }
 
 # Preferred display-name column per table (falls back to the key column).
@@ -163,22 +254,78 @@ DISPLAY_NAME_COLUMN = {
 }
 
 ALL_TABLES = list(EVENTHOUSE_BINDINGS) + list(LAKEHOUSE_BINDINGS)
+
+# The 6 sensor_reading_<stage> tables have no ontology_config.json entry
+# (see EVENTHOUSE_BINDINGS' comment), so their relationships -- mirroring
+# ontology_config.json's reading_to_line/reading_to_batch for the single
+# abstract sensor_reading table -- are added here by hand rather than
+# derived from CONFIG. reading_to_stage has no per-stage equivalent: the
+# stage is now implicit in which entity type a reading belongs to, not a
+# separate runtime relationship.
+STAGE_READING_RELATIONSHIPS = [
+    rel
+    for stage in STAGE_READING_TABLES
+    for rel in (
+        {
+            "name": f"reading_{stage}_to_line",
+            "from": f"sensor_reading_{stage}",
+            "to": "production_line",
+            "fromKey": "LineId",
+            "toKey": "LineId",
+        },
+        {
+            "name": f"reading_{stage}_to_batch",
+            "from": f"sensor_reading_{stage}",
+            "to": "batch",
+            "fromKey": "BatchId",
+            "toKey": "BatchId",
+        },
+    )
+]
+
 ALL_RELATIONSHIPS = [
     r for r in CONFIG["relationships"] if r["from"] in ALL_TABLES and r["to"] in ALL_TABLES
-]
+] + STAGE_READING_RELATIONSHIPS
+
+# Eventhouse tables with OneLake availability enabled
+# (fabric/eventhouse/04_onelake_mirroring.kql) and a matching Lakehouse
+# shortcut (fabric/ontology/deploy_onelake_shortcuts.py) -- table name ->
+# shortcut name in the dimension Lakehouse (a shortcut is transparent to
+# consumers, so it binds exactly like a native LakehouseTable). Excludes
+# `batch`: `silver_batch` is a materialized view, and
+# `.alter-merge table silver_batch policy mirroring ...` fails live (the
+# materialized-view variant of the command doesn't parse at all) --
+# batch_to_line/batch_to_recipe stay type-only; converting the
+# materialized view into a form OneLake availability supports is a
+# bigger follow-up, not attempted here.
+EVENTHOUSE_MIRROR_SHORTCUTS = {
+    "quality_check": "silver_quality_check",
+    "line_status": "silver_line_status",
+    **{f"sensor_reading_{stage}": f"silver_{stage}" for stage in STAGE_READING_TABLES},
+}
+
+
+def data_binding_source_table(table: str) -> str | None:
+    """The Lakehouse-area table name (native or shortcut) a relationship's
+    "from" table can be Contextualized through, or None if it can't be."""
+    if table in LAKEHOUSE_BINDINGS:
+        return LAKEHOUSE_BINDINGS[table]
+    return EVENTHOUSE_MIRROR_SHORTCUTS.get(table)
+
 
 # Relationship instances (Contextualizations): a relationship gets one
 # whenever its "from" table (the FK owner -- dataBindingTable is always
 # the table owning the FK column pair, not necessarily either entity's
-# own table in general, though it is for every relationship here) is
-# Lakehouse-bound. Eventhouse tables can't be a Contextualization source
-# at all, regardless of which entities they relate -- see module
-# docstring. Since every Supply Chain/ERP table is Lakehouse-bound, all
-# 10 of their relationships qualify, including shipment_to_batch (shipment
-# owns the FK; batch being Eventhouse-bound only matters for *source*
-# tables, not targets).
+# own table in general, though it is for every relationship here) has a
+# Lakehouse-area table to bind through -- either it's natively
+# Lakehouse-bound, or it's Eventhouse-bound with a OneLake-mirror
+# shortcut (above). Eventhouse tables can never be a Contextualization
+# source *directly* -- see module docstring. Since every Supply
+# Chain/ERP table is Lakehouse-bound, all 10 of their relationships
+# qualify, including shipment_to_batch (shipment owns the FK; batch
+# being Eventhouse-bound only matters for *source* tables, not targets).
 CONTEXTUALIZED_RELATIONSHIPS = {
-    rel["name"] for rel in ALL_RELATIONSHIPS if rel["from"] in LAKEHOUSE_BINDINGS
+    rel["name"] for rel in ALL_RELATIONSHIPS if data_binding_source_table(rel["from"]) is not None
 }
 
 
@@ -195,6 +342,12 @@ def property_id(table: str, column: str) -> str:
 def write_json(path: Path, obj: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(obj, indent=2) + "\n")
+
+
+def key_column(table: str) -> str:
+    if table in KEY_COLUMN_OVERRIDES:
+        return KEY_COLUMN_OVERRIDES[table]
+    return CONFIG["tables"][table]["key"]
 
 
 def as_property(table: str, col: str, value_type: str) -> dict:
@@ -216,13 +369,12 @@ def main() -> None:
     entity_type_id = {table: stable_id(table) for table in ALL_TABLES}
 
     for table in ALL_TABLES:
-        table_config = CONFIG["tables"][table]
         is_time_series = table in EVENTHOUSE_BINDINGS
         source_table = (
             EVENTHOUSE_BINDINGS[table][0] if is_time_series else LAKEHOUSE_BINDINGS[table]
         )
         columns = LIVE_COLUMNS[source_table]
-        key_col = table_config["key"]
+        key_col = key_column(table)
 
         eid = entity_type_id[table]
         entity_type = {
@@ -321,18 +473,37 @@ def main() -> None:
                     "sourceType": "LakehouseTable",
                     "workspaceId": "{{ .WorkspaceId }}",
                     "itemId": "{{ .LakehouseId }}",
-                    "sourceTableName": LAKEHOUSE_BINDINGS[from_table],
+                    "sourceTableName": data_binding_source_table(from_table),
                 },
+                # Per Microsoft Learn's Contextualization example (a
+                # `contains` RelationshipType binding two Equipment
+                # entities through a join table): sourceKeyRefBindings
+                # names the dataBindingTable column holding the SOURCE
+                # entity's own key value; targetKeyRefBindings names the
+                # column holding the TARGET's key value. Since
+                # dataBindingTable is always the "from" entity's own
+                # table here, the source-side column is that table's own
+                # key column (key_column(from_table)) -- not rel["fromKey"],
+                # which is the *foreign*-key column pointing at the
+                # target. Verified live this distinction actually
+                # matters, not just cosmetic: shipment_to_batch and
+                # shipment_to_factory have fromKey ("BatchId"/
+                # "FromFactoryId") that differs from toKey
+                # ("BatchId"/"FactoryId") -- shipment's own table has no
+                # "FactoryId" column, only "FromFactoryId", so binding
+                # target-side off rel["toKey"] (the earlier, incorrect
+                # version of this code) would reference a column that
+                # doesn't exist on the source table at all.
                 "sourceKeyRefBindings": [
                     {
-                        "sourceColumnName": rel["fromKey"],
-                        "targetPropertyId": property_id(from_table, CONFIG["tables"][from_table]["key"]),
+                        "sourceColumnName": key_column(from_table),
+                        "targetPropertyId": property_id(from_table, key_column(from_table)),
                     }
                 ],
                 "targetKeyRefBindings": [
                     {
-                        "sourceColumnName": rel["toKey"],
-                        "targetPropertyId": property_id(to_table, CONFIG["tables"][to_table]["key"]),
+                        "sourceColumnName": rel["fromKey"],
+                        "targetPropertyId": property_id(to_table, key_column(to_table)),
                     }
                 ],
             }
@@ -346,7 +517,7 @@ def main() -> None:
     n_rels = len(ALL_RELATIONSHIPS)
     print(f"generated {n_entities} entity types + {n_rels} relationship types "
           f"({n_contextualizations} with instance data) -> {OUT}")
-    print("(sensor_reading excluded -- EAV shape + string Timestamp, see module docstring)")
+    print("(sensor_reading bound as 6 per-stage entities, see module docstring)")
 
 
 if __name__ == "__main__":

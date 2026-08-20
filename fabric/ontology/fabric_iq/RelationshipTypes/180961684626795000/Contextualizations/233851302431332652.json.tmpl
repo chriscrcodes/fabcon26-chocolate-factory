@@ -1,0 +1,21 @@
+{
+  "id": "233851302431332652",
+  "dataBindingTable": {
+    "sourceType": "LakehouseTable",
+    "workspaceId": "{{ .WorkspaceId }}",
+    "itemId": "{{ .LakehouseId }}",
+    "sourceTableName": "silver_line_status"
+  },
+  "sourceKeyRefBindings": [
+    {
+      "sourceColumnName": "EventId",
+      "targetPropertyId": "549721031266699837"
+    }
+  ],
+  "targetKeyRefBindings": [
+    {
+      "sourceColumnName": "LineId",
+      "targetPropertyId": "258569118613810830"
+    }
+  ]
+}

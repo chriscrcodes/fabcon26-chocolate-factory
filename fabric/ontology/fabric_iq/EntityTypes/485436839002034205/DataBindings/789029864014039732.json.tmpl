@@ -1,0 +1,57 @@
+{
+  "id": "789029864014039732",
+  "dataBindingConfiguration": {
+    "dataBindingType": "TimeSeries",
+    "timestampColumnName": "Timestamp",
+    "propertyBindings": [
+      {
+        "sourceColumnName": "Timestamp",
+        "targetPropertyId": "979410109732259148"
+      },
+      {
+        "sourceColumnName": "LineId",
+        "targetPropertyId": "797365222877092030"
+      },
+      {
+        "sourceColumnName": "LineName",
+        "targetPropertyId": "620142614166860431"
+      },
+      {
+        "sourceColumnName": "FactoryId",
+        "targetPropertyId": "116248381647049990"
+      },
+      {
+        "sourceColumnName": "FactoryCode",
+        "targetPropertyId": "57903175805260774"
+      },
+      {
+        "sourceColumnName": "StageId",
+        "targetPropertyId": "34780777431824628"
+      },
+      {
+        "sourceColumnName": "BatchId",
+        "targetPropertyId": "131334123275017261"
+      },
+      {
+        "sourceColumnName": "ParticleSizeMicron",
+        "targetPropertyId": "152725979427853623"
+      },
+      {
+        "sourceColumnName": "MotorTemperatureC",
+        "targetPropertyId": "1144810008132444205"
+      },
+      {
+        "sourceColumnName": "ThroughputKgPerHr",
+        "targetPropertyId": "1134975959018760470"
+      }
+    ],
+    "sourceTableProperties": {
+      "sourceType": "KustoTable",
+      "workspaceId": "{{ .WorkspaceId }}",
+      "itemId": "{{ .EventhouseId }}",
+      "clusterUri": "{{ .ClusterUri }}",
+      "databaseName": "{{ .DatabaseName }}",
+      "sourceTableName": "silver_grinding"
+    }
+  }
+}

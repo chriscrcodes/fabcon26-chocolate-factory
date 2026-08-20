@@ -66,19 +66,42 @@ needed here):
   Fabric SQL Database (`fabric/sql-database/`) stays the actual system
   of record; this Lakehouse copy exists solely to satisfy the
   Ontology's binding format.
+- [`deploy_onelake_shortcuts.py`](deploy_onelake_shortcuts.py) creates
+  OneLake shortcuts in the dimension Lakehouse pointing at Eventhouse
+  tables with OneLake availability enabled
+  (`fabric/eventhouse/04_onelake_mirroring.kql`) — `silver_quality_check`,
+  `silver_line_status`, and the 6 per-stage sensor tables. A shortcut is
+  transparent to consumers, so these bind exactly like native Lakehouse
+  tables, letting relationships whose "from" table is Eventhouse-bound
+  get real Contextualization instances despite Eventhouse tables never
+  being a valid Contextualization *source* directly.
 - [`deploy_fabric_iq_ontology.py`](deploy_fabric_iq_ontology.py) deploys
   the generated definition via direct Fabric REST calls (not the
   `fabric_ontology` Terraform resource — verified live that
   Terraform-issued calls for it reliably fail against this tenant while
   identical direct REST calls succeed).
 
-All three are wired into `infra/fabric.tf` as `null_resource`s and
+All four are wired into `infra/fabric.tf` as `null_resource`s and
 run automatically on `terraform apply` — see `infra/README.md`.
-7 of Factory/Quality's 8 entities, plus all 9 Supply Chain/ERP entities
-(16 total), are bound; 11 of the 17 relationship types have real
-Contextualization instances, including the cross-domain
-`shipment_to_batch` link. `sensor_reading` is still deferred (EAV-shaped);
-see [`generate_fabric_iq_definition.py`](generate_fabric_iq_definition.py)'s
-docstring for the exact constraints found live and what's left (the
-remaining 6 Factory/Quality relationship instances, which need an
-Eventhouse → Lakehouse export).
+
+**All 22 entities are bound**: every Factory/Quality entity (`batch`,
+`quality_check`, `line_status`, the 4 dimension tables, and
+`sensor_reading` realized as 6 per-stage entities — see
+[`generate_fabric_iq_definition.py`](generate_fabric_iq_definition.py)'s
+docstring for why a single EAV-shaped entity isn't possible and how the
+per-stage split works) plus all 9 Supply Chain/ERP entities. 27 of the
+29 relationship types have real Contextualization instances, including
+the cross-domain `shipment_to_batch` link — only `batch_to_line` and
+`batch_to_recipe` stay type-only, since `silver_batch` is a
+materialized view and doesn't support the OneLake mirroring policy
+command (see `fabric/eventhouse/README.md`'s "Verified against a live
+tenant" section).
+
+Also worth knowing if extending this further: the docstring documents a
+real correctness bug found and fixed in the Contextualization
+key-binding logic — `sourceKeyRefBindings`/`targetKeyRefBindings` name
+columns identifying *that side's own entity*, not simply the
+relationship's declared `fromKey`/`toKey` used symmetrically (which
+happened to produce valid-but-wrong bindings for every relationship
+except `shipment_to_factory`, whose foreign-key column name doesn't
+match its `toKey`).

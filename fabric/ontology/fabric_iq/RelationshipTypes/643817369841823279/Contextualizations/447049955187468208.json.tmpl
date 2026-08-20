@@ -1,0 +1,21 @@
+{
+  "id": "447049955187468208",
+  "dataBindingTable": {
+    "sourceType": "LakehouseTable",
+    "workspaceId": "{{ .WorkspaceId }}",
+    "itemId": "{{ .LakehouseId }}",
+    "sourceTableName": "silver_quality_check"
+  },
+  "sourceKeyRefBindings": [
+    {
+      "sourceColumnName": "CheckId",
+      "targetPropertyId": "4898981233688552"
+    }
+  ],
+  "targetKeyRefBindings": [
+    {
+      "sourceColumnName": "BatchId",
+      "targetPropertyId": "437529534197250178"
+    }
+  ]
+}

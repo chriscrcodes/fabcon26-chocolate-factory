@@ -458,13 +458,14 @@ resource "null_resource" "load_kql" {
         "${path.module}/../fabric/eventhouse/01_bronze_and_reference.kql",
         "${path.module}/../fabric/eventhouse/02_silver.kql",
         "${path.module}/../fabric/eventhouse/03_gold.kql",
+        "${path.module}/../fabric/eventhouse/04_onelake_mirroring.kql",
         "${path.module}/../fabric/eventhouse/run_kql.py",
       ] : filesha256(f)
     ]))
   }
 
   provisioner "local-exec" {
-    command = "uv run --with azure-kusto-data --with azure-identity ${path.module}/../fabric/eventhouse/run_kql.py ${path.module}/../fabric/eventhouse/01_bronze_and_reference.kql ${path.module}/../fabric/eventhouse/02_silver.kql ${path.module}/../fabric/eventhouse/03_gold.kql"
+    command = "uv run --with azure-kusto-data --with azure-identity ${path.module}/../fabric/eventhouse/run_kql.py ${path.module}/../fabric/eventhouse/01_bronze_and_reference.kql ${path.module}/../fabric/eventhouse/02_silver.kql ${path.module}/../fabric/eventhouse/03_gold.kql ${path.module}/../fabric/eventhouse/04_onelake_mirroring.kql"
 
     environment = {
       KQL_QUERY_URI = fabric_kql_database.this.properties.query_service_uri
@@ -474,13 +475,43 @@ resource "null_resource" "load_kql" {
 }
 
 # ---------------------------------------------------------------------
-# Fabric IQ Ontology -- Factory/Quality domain (7 of 8 entities: batch,
-# quality_check, line_status bound TimeSeries to the Eventhouse; factory,
-# production_line, production_stage, recipe bound NonTimeSeries to the
-# dimension Lakehouse above -- see
-# fabric/ontology/generate_fabric_iq_definition.py's docstring for why
-# sensor_reading is still deferred, and which relationships have
-# instance data wired vs. type-only).
+# OneLake shortcuts -- lets Eventhouse tables with OneLake availability
+# enabled (04_onelake_mirroring.kql, run as part of load_kql above) be
+# referenced as ordinary Lakehouse Delta tables, so Fabric IQ Ontology
+# relationships whose "from" table is Eventhouse-bound can get real
+# Contextualization instances (Eventhouse tables can never be a
+# Contextualization *source* directly). See
+# fabric/ontology/deploy_onelake_shortcuts.py for which tables and why
+# silver_batch (a materialized view) is excluded.
+# ---------------------------------------------------------------------
+
+resource "null_resource" "deploy_onelake_shortcuts" {
+  depends_on = [null_resource.load_kql, fabric_lakehouse.dimensions]
+
+  triggers = {
+    files_hash = filesha256("${path.module}/../fabric/ontology/deploy_onelake_shortcuts.py")
+  }
+
+  provisioner "local-exec" {
+    command = "uv run --with azure-identity --with requests ${path.module}/../fabric/ontology/deploy_onelake_shortcuts.py"
+
+    environment = {
+      FABRIC_WORKSPACE_ID         = local.workspace_id
+      FABRIC_LAKEHOUSE_ID         = fabric_lakehouse.dimensions.id
+      FABRIC_KQL_DATABASE_ITEM_ID = fabric_kql_database.this.id
+    }
+  }
+}
+
+# ---------------------------------------------------------------------
+# Fabric IQ Ontology -- all Factory/Quality entities (batch, quality_check,
+# line_status, and 6 per-stage sensor_reading entities bound TimeSeries
+# to the Eventhouse; factory, production_line, production_stage, recipe
+# bound NonTimeSeries to the dimension Lakehouse above) plus all Supply
+# Chain/ERP entities -- see
+# fabric/ontology/generate_fabric_iq_definition.py's docstring for the
+# full binding rationale and which relationships have instance data
+# wired vs. type-only.
 #
 # Deployed via fabric/ontology/deploy_fabric_iq_ontology.py (direct Fabric
 # REST calls), not the `fabric_ontology` Terraform resource -- verified
@@ -493,7 +524,7 @@ resource "null_resource" "load_kql" {
 # ---------------------------------------------------------------------
 
 resource "null_resource" "deploy_ontology" {
-  depends_on = [null_resource.load_kql, null_resource.load_dimension_tables]
+  depends_on = [null_resource.load_kql, null_resource.load_dimension_tables, null_resource.deploy_onelake_shortcuts]
 
   triggers = {
     files_hash = sha256(join("", [
