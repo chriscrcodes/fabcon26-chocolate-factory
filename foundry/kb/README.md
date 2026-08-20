@@ -32,28 +32,36 @@ and
 
 Deployed and verified live, in two parts:
 
-1. **Search-side plumbing — fully automated, done.**
-   [`deploy_kb_files.py`](deploy_kb_files.py) uploads `00`–`03` to the
-   dimension Lakehouse's `Files/kb/` folder (same OneLake mechanism
-   `fabric/ontology/deploy_dimension_lakehouse.py` uses for the dimension
-   CSVs, just without a "Load Table" step — these are documents, not
-   tabular data).
+1. **Search-side plumbing, including the knowledge source — fully
+   automated, done.** [`deploy_kb_files.py`](deploy_kb_files.py)
+   uploads `00`–`03` to the dimension Lakehouse's `Files/kb/` folder
+   (same OneLake mechanism `fabric/ontology/deploy_dimension_lakehouse.py`
+   uses for the dimension CSVs, just without a "Load Table" step —
+   these are documents, not tabular data).
    [`deploy_search_indexer.py`](deploy_search_indexer.py) configures an
-   Azure AI Search OneLake files data source, index, and indexer over
-   that folder. Both are wired into `infra/fabric.tf` as
-   `null_resource`s and run on `terraform apply` — see
+   Azure AI Search OneLake files data source, index (with a semantic
+   configuration), indexer, and a `searchIndex`-kind **knowledge
+   source** object wrapping the index. All wired into `infra/fabric.tf`
+   as `null_resource`s and run on `terraform apply` — see
    `infra/README.md`'s "Foundry IQ knowledge base" section for the
-   two live-verified bugs found (workspace role must be Contributor,
-   not Viewer; document keys need a `base64Encode` field mapping).
-   Confirmed live: `4/4` docs indexed, and a test query for "overdue
-   invoice" correctly surfaces `03-erp-orders.md`.
+   live-verified bugs found (workspace role must be Contributor, not
+   Viewer; document keys need a `base64Encode` field mapping; a
+   populated index alone isn't enough — the Foundry portal only
+   recognizes a knowledge *source* object, which needs a semantic
+   configuration to be considered eligible). Confirmed live: `4/4` docs
+   indexed, a test query for "overdue invoice" correctly surfaces
+   `03-erp-orders.md`, and `GET .../knowledgesources` returns the
+   wrapping object.
 2. **The Foundry IQ knowledge base itself — manual, one-time, not yet
-   done.** Layering a Foundry IQ knowledge base on top of the Search
-   index above has no documented Terraform/CLI/REST path as of this
-   writing — only a Foundry-portal wizard. See
-   [`foundry-iq-setup.md`](foundry-iq-setup.md) for the exact
-   prerequisites, values, click-through steps, and how to verify it
-   worked.
+   done.** Layering a Foundry IQ knowledge base on top of the knowledge
+   source above has no documented Terraform/CLI/REST path as of this
+   writing — only a Foundry-portal wizard, and it also requires the
+   Search service to be added as a Connected resource on the Foundry
+   project first. See [`foundry-iq-setup.md`](foundry-iq-setup.md) for
+   the exact prerequisites, values, click-through steps, and how to
+   verify it worked — including the "No supported knowledge sources
+   available" error this produces if the knowledge source/semantic
+   config isn't in place yet.
 
 Once the Coordinator + specialist agents exist (`foundry/agents/`, not
 started yet), each specialist should be scoped to its own document(s) —

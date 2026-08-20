@@ -255,10 +255,11 @@ verified live against this tenant, command by command, this session.
 
 `azurerm_search_service.kb` (Basic tier), `fabric_workspace_role_assignment.search_contributor`,
 `null_resource.load_kb_files`, and `null_resource.deploy_search_indexer`
-provision and verify everything up to a queryable Azure AI Search index
-over `foundry/kb/*.md` — confirmed live end to end (`4/4` docs indexed,
-test query for "overdue invoice" correctly surfaces
-`03-erp-orders.md`). Two live-verified fixes needed beyond the
+provision and verify everything up to a queryable Azure AI Search
+**knowledge source** over `foundry/kb/*.md` — confirmed live end to end
+(`4/4` docs indexed, test query for "overdue invoice" correctly
+surfaces `03-erp-orders.md`, `GET .../knowledgesources` returns the
+wrapping object). Three live-verified fixes needed beyond the
 documented happy path:
 
 - The OneLake files indexer's minimum required Fabric workspace role is
@@ -273,11 +274,25 @@ documented happy path:
   every document with "Invalid document key." Fixed with the standard
   blob-indexer `fieldMappings` `base64Encode` function on the key field
   (see `foundry/kb/deploy_search_indexer.py`).
+- **A populated, queryable index is not enough for the Foundry portal to
+  recognize it.** Creating a knowledge base in the portal failed with
+  "No supported knowledge sources available. Create one first." — even
+  though the index had 4 documents and answered direct queries fine.
+  Root cause: the Foundry portal's knowledge-base picker lists objects
+  from `GET .../knowledgesources`, a distinct resource that has to
+  explicitly wrap the index (`PUT .../knowledgesources/{name}`, kind
+  `searchIndex`) — and that object is only considered eligible if the
+  underlying index has a `semantic.configurations[]` block. Both are
+  GA (`api-version=2026-04-01`, no preview needed) and now provisioned
+  by `deploy_search_indexer.py`. See `foundry/kb/foundry-iq-setup.md`'s
+  "What went wrong first" section for the full diagnosis.
 
 **Not covered by this Terraform state**: the actual Foundry IQ
 **knowledge base** object — a Foundry-portal-only step layered on top of
-this Search index, with no documented Terraform/CLI/REST path as of this
-writing. See `foundry/kb/README.md` for the manual steps and why. A
-from-scratch `terraform apply` gets you a ready-to-query Search index;
-turning that into something a Foundry agent can call still requires one
+the knowledge source above, with no documented Terraform/CLI/REST path
+as of this writing, and requiring the Search service to be added as a
+Connected resource on the Foundry project first. See
+`foundry/kb/foundry-iq-setup.md` for the manual steps and why. A
+from-scratch `terraform apply` gets you a ready-to-use knowledge source;
+turning that into something a Foundry agent can call still requires
 manual portal action.
