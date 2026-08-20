@@ -4,56 +4,17 @@ Everything up through a **knowledge source** — a queryable, semantically
 -configured Azure AI Search index over `foundry/kb/*.md`, wrapped in a
 `searchIndex`-kind knowledge source object — is automated by
 `terraform apply` (see [`README.md`](README.md) and `infra/README.md`'s
-"Foundry IQ knowledge base" section). This doc used to describe a
-different, incorrect flow (picking "Microsoft OneLake" as a knowledge
-*type* directly in a knowledge-base wizard) — that's not how the current
-Foundry IQ model works. Correction, found the hard way (see "What went
-wrong first" below): a **knowledge source** and a **knowledge base** are
-two distinct objects, and the portal's knowledge-base picker only lists
-existing knowledge sources — it does not let you point a knowledge base
-at an arbitrary Search index/OneLake path directly.
+"Foundry IQ knowledge base" section). A **knowledge source** and a
+**knowledge base** are two distinct Foundry IQ objects: the portal's
+knowledge-base picker only lists existing knowledge sources, so one has
+to exist (with a semantic configuration on its underlying index) before
+a knowledge base can reference it — see `infra/README.md` for how
+`deploy_search_indexer.py` provisions this automatically.
 
 Layering the actual **Foundry IQ knowledge base** object on top of the
 knowledge source is the one piece with no documented Terraform/CLI/REST
 path as of this writing — portal-only. This doc is that manual step,
 done once per environment.
-
-## What went wrong first
-
-Trying to create a knowledge base in the Foundry portal produced:
-
-> No supported knowledge sources available. Create one first.
-
-...even though the Search index was already populated (verified via
-direct `curl` queries returning real documents). Root cause: a
-populated, queryable Search index is not by itself a "knowledge
-source" — that's a separate object (`PUT .../knowledgesources/{name}`)
-that has to explicitly wrap the index, and the portal's knowledge-base
-creation picker only offers objects from `GET .../knowledgesources`, not
-the raw index list. Two things were missing, both now fixed and
-automated in `deploy_search_indexer.py`:
-
-1. **A semantic configuration on the index itself** — Foundry IQ filters
-   out indexes with no `semantic.configurations[]` block as ineligible.
-2. **A `searchIndex`-kind knowledge source object**
-   (`chocolate-factory-kb-source`) wrapping the index, with
-   `searchIndexParameters.semanticConfigurationName` pointing at that
-   configuration by name.
-
-Both are GA (`api-version=2026-04-01`, no preview needed) and now run
-automatically on every `terraform apply` — see
-[Microsoft Learn's Knowledge Source overview](https://learn.microsoft.com/en-us/azure/search/agentic-knowledge-source-overview)
-and [Create a Search Index Knowledge Source](https://learn.microsoft.com/en-us/azure/search/agentic-knowledge-source-how-to-search-index)
-for the underlying model. Verify it's live before touching the portal:
-
-```bash
-az search admin-key show --resource-group <rg> --service-name <AZURE_SEARCH_SERVICE_NAME> --query primaryKey -o tsv
-curl "https://<AZURE_SEARCH_SERVICE_NAME>.search.windows.net/knowledgesources?api-version=2026-04-01" -H "api-key: <key>"
-```
-
-Should return one entry, `chocolate-factory-kb-source`, kind
-`searchIndex`. If it doesn't, re-run `terraform apply` in `infra/`
-before going anywhere near the Foundry portal.
 
 ## Prerequisites
 
@@ -66,10 +27,15 @@ before going anywhere near the Foundry portal.
   Foundry project — Management Center → Connected resources → New
   connection → Azure AI Search → select the service (`AZURE_SEARCH_SERVICE_NAME`
   below). Without this, the Foundry portal has no way to discover the
-  knowledge source at all, regardless of whether it exists.
+  knowledge source.
 - **RBAC**, on top of whatever role got you access to the Foundry
   project itself: **Search Index Data Reader** (or Contributor) on the
   Azure AI Search service, so the Foundry project can query the index.
+- **A model deployment**, only if you want the knowledge base to use
+  reasoning effort **Low** or **Medium** — the portal requires an
+  attached model deployment for those tiers. Reasoning effort
+  **Minimal** does not require one; pick Minimal to skip this
+  prerequisite entirely.
 
 ## Values you'll need
 
@@ -88,10 +54,10 @@ Pull these from `infra` (`terraform output`, run from `infra/`):
    place (Management Center → Connected resources).
 3. In the left nav, go to **Build → Knowledge**.
 4. Click **Create a knowledge base**.
-5. In the knowledge-source picker, select **`chocolate-factory-kb-source`**
-   — it should now appear (this is the object that previously produced
-   "No supported knowledge sources available").
-6. Name the knowledge base something identifiable (e.g.
+5. In the knowledge-source picker, select **`chocolate-factory-kb-source`**.
+6. Set reasoning effort to **Minimal** unless you've set up a model
+   deployment (see "Prerequisites").
+7. Name the knowledge base something identifiable (e.g.
    `chocolate-factory-kb`), click **Create**, then **Save** once
    provisioned.
 
@@ -120,6 +86,7 @@ If the answer comes back ungrounded or wrong, check first whether the
 underlying Search index actually has the expected content:
 
 ```bash
+az search admin-key show --resource-group <rg> --service-name <AZURE_SEARCH_SERVICE_NAME> --query primaryKey -o tsv
 curl "https://<AZURE_SEARCH_SERVICE_NAME>.search.windows.net/indexes/chocolate-factory-kb/docs/\$count?api-version=2026-04-01" -H "api-key: <key>"
 ```
 

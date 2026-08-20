@@ -259,33 +259,26 @@ provision and verify everything up to a queryable Azure AI Search
 **knowledge source** over `foundry/kb/*.md` — confirmed live end to end
 (`4/4` docs indexed, test query for "overdue invoice" correctly
 surfaces `03-erp-orders.md`, `GET .../knowledgesources` returns the
-wrapping object). Three live-verified fixes needed beyond the
-documented happy path:
+wrapping object). Requirements beyond the documented happy path:
 
 - The OneLake files indexer's minimum required Fabric workspace role is
   **Contributor**, not Viewer (per
   [Microsoft Learn](https://learn.microsoft.com/en-us/azure/search/search-how-to-index-onelake-files)'s
-  "Grant permissions" section) — Viewer was tried first and never
-  produced a permissions error, it just silently indexed nothing, so
-  don't assume Viewer is "probably fine."
+  "Grant permissions" section).
 - OneLake's `metadata_storage_path` values are full URLs
   (`https://onelake.blob.fabric.microsoft.com/...`), which contain `:`
-  and `/` — invalid characters for a Search index key. First run failed
-  every document with "Invalid document key." Fixed with the standard
+  and `/` — invalid characters for a Search index key. The standard
   blob-indexer `fieldMappings` `base64Encode` function on the key field
-  (see `foundry/kb/deploy_search_indexer.py`).
-- **A populated, queryable index is not enough for the Foundry portal to
-  recognize it.** Creating a knowledge base in the portal failed with
-  "No supported knowledge sources available. Create one first." — even
-  though the index had 4 documents and answered direct queries fine.
-  Root cause: the Foundry portal's knowledge-base picker lists objects
-  from `GET .../knowledgesources`, a distinct resource that has to
-  explicitly wrap the index (`PUT .../knowledgesources/{name}`, kind
-  `searchIndex`) — and that object is only considered eligible if the
-  underlying index has a `semantic.configurations[]` block. Both are
-  GA (`api-version=2026-04-01`, no preview needed) and now provisioned
-  by `deploy_search_indexer.py`. See `foundry/kb/foundry-iq-setup.md`'s
-  "What went wrong first" section for the full diagnosis.
+  handles this (see `foundry/kb/deploy_search_indexer.py`).
+- **The Foundry portal's knowledge-base picker only lists objects from
+  `GET .../knowledgesources`, not raw Search indexes.** A populated,
+  queryable index isn't enough on its own — it needs a `searchIndex`-kind
+  knowledge source object wrapping it (`PUT .../knowledgesources/{name}`),
+  and that object is only eligible if the underlying index has a
+  `semantic.configurations[]` block. Both are GA
+  (`api-version=2026-04-01`, no preview needed) and provisioned by
+  `deploy_search_indexer.py`. See `foundry/kb/foundry-iq-setup.md` for
+  the manual knowledge-base-creation step this feeds into.
 
 **Not covered by this Terraform state**: the actual Foundry IQ
 **knowledge base** object — a Foundry-portal-only step layered on top of

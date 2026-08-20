@@ -43,9 +43,9 @@ by domain via each class's icon/color (🏭 Factory/Quality, 🚚 Supply Chain,
 
 Deployed as a real Fabric IQ Ontology item (preview), bound directly to
 the live Eventhouse and a small dimension Lakehouse — not the
-`sources/fabric-ontology` DIY accelerator this section used to describe
-(that repo isn't vendored into this checkout, and the real product turned
-out to be fully scriptable, so it's no longer part of this plan):
+`sources/fabric-ontology` DIY accelerator (that repo isn't vendored
+into this checkout; the real product is fully scriptable, so it isn't
+needed here):
 
 - [`generate_fabric_iq_definition.py`](generate_fabric_iq_definition.py)
   generates the Ontology's `EntityTypes`/`RelationshipTypes` definition
