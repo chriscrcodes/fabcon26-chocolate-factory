@@ -4,12 +4,14 @@ dimension Lakehouse's Files/kb/ folder (uploaded by deploy_kb_files.py),
 via a native OneLake files indexer -- no custom ETL/chunking pipeline,
 per https://learn.microsoft.com/en-us/azure/search/search-how-to-index-onelake-files.
 
-Note this is only the Search-side plumbing (data source + index +
-indexer + knowledge source). The Foundry IQ *knowledge base* itself has
-no documented Terraform/CLI/REST path yet -- see foundry/kb/README.md --
-and is still a one-time manual step in the Foundry portal.
+The Foundry IQ *knowledge base* is just another Azure AI Search
+data-plane object (`PUT .../knowledgebases/{name}`), same family as
+datasources/indexes/indexers/knowledgesources. It needs
+`api-version=2026-05-01-preview` specifically -- the GA version used
+for everything else here doesn't yet support the fields it requires
+(`outputMode`, `retrievalReasoningEffort`).
 
-Four REST calls, `PUT .../{kind}/{name}?api-version=2026-04-01`:
+Five REST calls, `PUT .../{kind}/{name}?api-version=<version>`:
 1. Data source: type "onelake", container.name = the Lakehouse's item
    ID, container.query = "kb" (the Files/kb/ subfolder -- container
    paths are relative to the Lakehouse's Files root, not prefixed with
@@ -45,6 +47,14 @@ Four REST calls, `PUT .../{kind}/{name}?api-version=2026-04-01`:
    `defaultConfiguration` pointing at it) on the index itself, and the
    knowledge source's own `searchIndexParameters.semanticConfigurationName`
    referencing that same configuration by name.
+5. Knowledge base: wraps the knowledge source above,
+   `outputMode: "extractiveData"` (no LLM-generated answers, just
+   ranked passages) and `retrievalReasoningEffort: {"kind": "minimal"}`
+   (the one reasoning tier that doesn't require an attached model
+   deployment). Querying this also requires semantic ranking enabled at
+   the *service* level (`semantic_search_sku` in `azure.tf`'s
+   `azurerm_search_service.kb` -- a separate setting from the index's
+   own `semantic.configurations[]` block above).
 
 Auth to the Search service's *management* REST API itself uses its
 admin key (Terraform output, not a Fabric/Azure AD token) -- simplest
@@ -57,15 +67,19 @@ import os
 import requests
 
 API_VERSION = "2026-04-01"
+PREVIEW_API_VERSION = "2026-05-01-preview"  # required for knowledgebases -- see module docstring
 INDEX_NAME = "chocolate-factory-kb"
 DATASOURCE_NAME = "chocolate-factory-kb-onelake"
 INDEXER_NAME = "chocolate-factory-kb-indexer"
 SEMANTIC_CONFIG_NAME = "chocolate-factory-kb-semantic"
 KNOWLEDGE_SOURCE_NAME = "chocolate-factory-kb-source"
+KNOWLEDGE_BASE_NAME = "chocolate-factory-kb"
 
 
-def put(session: requests.Session, endpoint: str, kind: str, name: str, body: dict) -> None:
-    resp = session.put(f"{endpoint}/{kind}/{name}", params={"api-version": API_VERSION}, json=body)
+def put(
+    session: requests.Session, endpoint: str, kind: str, name: str, body: dict, api_version: str = API_VERSION
+) -> None:
+    resp = session.put(f"{endpoint}/{kind}/{name}", params={"api-version": api_version}, json=body)
     resp.raise_for_status()
 
 
@@ -175,6 +189,21 @@ def main() -> None:
         },
     )
     print(f"knowledge source {KNOWLEDGE_SOURCE_NAME} configured")
+
+    put(
+        session,
+        endpoint,
+        "knowledgebases",
+        KNOWLEDGE_BASE_NAME,
+        {
+            "name": KNOWLEDGE_BASE_NAME,
+            "outputMode": "extractiveData",
+            "knowledgeSources": [{"name": KNOWLEDGE_SOURCE_NAME}],
+            "retrievalReasoningEffort": {"kind": "minimal"},
+        },
+        api_version=PREVIEW_API_VERSION,
+    )
+    print(f"knowledge base {KNOWLEDGE_BASE_NAME} configured")
 
 
 if __name__ == "__main__":

@@ -251,15 +251,21 @@ materialized views is unconfirmed (see the `fabric_kql_database` note
 above). `run_kql.py` reuses the same statement-splitting approach
 verified live against this tenant, command by command, this session.
 
-### Foundry IQ knowledge base — Search-side plumbing only
+### Foundry IQ knowledge base
 
 `azurerm_search_service.kb` (Basic tier), `fabric_workspace_role_assignment.search_contributor`,
 `null_resource.load_kb_files`, and `null_resource.deploy_search_indexer`
-provision and verify everything up to a queryable Azure AI Search
-**knowledge source** over `foundry/kb/*.md` — confirmed live end to end
-(`4/4` docs indexed, test query for "overdue invoice" correctly
-surfaces `03-erp-orders.md`, `GET .../knowledgesources` returns the
-wrapping object). Requirements beyond the documented happy path:
+provision and verify a complete, queryable Foundry IQ **knowledge
+base** over `foundry/kb/*.md` — the data source, index, indexer,
+knowledge source, and knowledge base itself, end to end. The knowledge
+base is just another Azure AI Search data-plane object
+(`PUT .../knowledgebases/{name}`), same family as
+datasources/indexes/indexers/knowledgesources, so it's fully
+automatable from `deploy_search_indexer.py` — no portal step needed to
+create it. Confirmed live end to end (`4/4` docs indexed, test query
+for "overdue invoice" correctly surfaces `03-erp-orders.md`, the
+knowledge base answers questions correctly in the Foundry portal).
+Requirements beyond the documented happy path:
 
 - The OneLake files indexer's minimum required Fabric workspace role is
   **Contributor**, not Viewer (per
@@ -270,28 +276,22 @@ wrapping object). Requirements beyond the documented happy path:
   and `/` — invalid characters for a Search index key. The standard
   blob-indexer `fieldMappings` `base64Encode` function on the key field
   handles this (see `foundry/kb/deploy_search_indexer.py`).
-- **The Foundry portal's knowledge-base picker only lists objects from
-  `GET .../knowledgesources`, not raw Search indexes.** A populated,
-  queryable index isn't enough on its own — it needs a `searchIndex`-kind
-  knowledge source object wrapping it (`PUT .../knowledgesources/{name}`),
-  and that object is only eligible if the underlying index has a
-  `semantic.configurations[]` block. Both are GA
-  (`api-version=2026-04-01`, no preview needed) and provisioned by
-  `deploy_search_indexer.py`. See `foundry/kb/foundry-iq-setup.md` for
-  the manual knowledge-base-creation step this feeds into.
-- **Semantic ranking must be enabled at the service level**, a separate
-  control-plane setting from the index's own `semantic.configurations[]`
-  block above — a knowledge base query against a service without this
-  fails with "Knowledge Base requires Semantic Search to be enabled for
-  this service." `azurerm_search_service.kb`'s `semantic_search_sku =
-  "free"` covers this (1,000 semantic queries/month at no extra cost).
+- **The knowledge source needs a semantic configuration on its
+  underlying index to be usable.** `searchIndex`-kind knowledge source
+  objects (`PUT .../knowledgesources/{name}`) wrap the index; one
+  lacking a `semantic.configurations[]` block isn't eligible.
+- **Semantic ranking must also be enabled at the service level**, a
+  separate control-plane setting from the index's own
+  `semantic.configurations[]` block — `azurerm_search_service.kb`'s
+  `semantic_search_sku = "free"` covers this (1,000 semantic
+  queries/month at no extra cost).
+- **The knowledge base object itself requires `api-version=2026-05-01-preview`**
+  — the GA version used for every other call here doesn't yet support
+  fields like `outputMode`/`retrievalReasoningEffort`.
+- `retrievalReasoningEffort: {"kind": "minimal"}` is the one reasoning
+  tier that doesn't require an attached model deployment; Low/Medium do.
 
-**Not covered by this Terraform state**: the actual Foundry IQ
-**knowledge base** object — a Foundry-portal-only step layered on top of
-the knowledge source above, with no documented Terraform/CLI/REST path
-as of this writing, and requiring the Search service to be added as a
-Connected resource on the Foundry project first. See
-`foundry/kb/foundry-iq-setup.md` for the manual steps and why. A
-from-scratch `terraform apply` gets you a ready-to-use knowledge source;
-turning that into something a Foundry agent can call still requires
-manual portal action.
+**Not covered by this Terraform state**: adding the Search service as a
+Connected resource on the Foundry project, a project-level setting with
+no Search-service-object equivalent, so no REST/Terraform path applies.
+See `foundry/kb/foundry-iq-setup.md` for that one remaining manual step.

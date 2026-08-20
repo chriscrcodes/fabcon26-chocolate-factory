@@ -45,12 +45,13 @@ streamed, per the medallion-layers memo's two-plane design.
 
 - [`foundry/kb/`](foundry/kb) — unstructured knowledge-base documents
   for Foundry IQ: process glossary, sensor metric ranges, business-rule
-  definitions per domain. Uploaded to OneLake and indexed by a live
-  Azure AI Search OneLake files indexer, deployed and verified end to
-  end — see `foundry/kb/README.md`. The Foundry IQ knowledge base
-  layered on top of that index (still provisions a real Search index
-  under the hood — "no ETL" doesn't mean "no Search") is a one-time
-  manual Foundry-portal step — see `foundry/kb/foundry-iq-setup.md`.
+  definitions per domain. Uploaded to OneLake and indexed into a
+  complete, queryable Foundry IQ knowledge base — data source, index,
+  indexer, knowledge source, and knowledge base itself all provisioned
+  by `terraform apply` — deployed and verified end to end — see
+  `foundry/kb/README.md`. The one remaining manual step is
+  project-level (adding the Search service as a Connected resource on
+  the Foundry project) — see `foundry/kb/foundry-iq-setup.md`.
 - `foundry/agents/` — not started. Coordinator + domain-specialist
   (Factory/Quality, Supply Chain, ERP/Orders) instructions and
   orchestration config for Microsoft Foundry.

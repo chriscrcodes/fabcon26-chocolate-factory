@@ -29,34 +29,35 @@ See
 and
 [the OneLake-files-indexer how-to](https://learn.microsoft.com/en-us/azure/search/search-how-to-index-onelake-files).
 
-Deployed and verified live, in two parts:
+Deployed and verified live, fully automated:
 
-1. **Search-side plumbing, including the knowledge source — fully
-   automated, done.** [`deploy_kb_files.py`](deploy_kb_files.py)
-   uploads `00`–`03` to the dimension Lakehouse's `Files/kb/` folder
-   (same OneLake mechanism `fabric/ontology/deploy_dimension_lakehouse.py`
-   uses for the dimension CSVs, just without a "Load Table" step —
-   these are documents, not tabular data).
-   [`deploy_search_indexer.py`](deploy_search_indexer.py) configures an
-   Azure AI Search OneLake files data source, index (with a semantic
-   configuration), indexer, and a `searchIndex`-kind **knowledge
-   source** object wrapping the index — the Foundry portal's
-   knowledge-base picker only lists knowledge source objects, not raw
-   indexes, and requires the semantic configuration for eligibility.
-   All wired into `infra/fabric.tf` as `null_resource`s and run on
-   `terraform apply` — see `infra/README.md`'s "Foundry IQ knowledge
-   base" section for the requirements involved (workspace role must be
-   Contributor, not Viewer; document keys need a `base64Encode` field
-   mapping). Confirmed live: `4/4` docs indexed, a test query for
-   "overdue invoice" correctly surfaces `03-erp-orders.md`, and
-   `GET .../knowledgesources` returns the wrapping object.
-2. **The Foundry IQ knowledge base itself — manual, one-time, not yet
-   done.** Layering a Foundry IQ knowledge base on top of the knowledge
-   source above has no documented Terraform/CLI/REST path as of this
-   writing — only a Foundry-portal wizard, and it also requires the
-   Search service to be added as a Connected resource on the Foundry
-   project first. See [`foundry-iq-setup.md`](foundry-iq-setup.md) for
-   the exact prerequisites, values, and click-through steps.
+[`deploy_kb_files.py`](deploy_kb_files.py) uploads `00`–`03` to the
+dimension Lakehouse's `Files/kb/` folder (same OneLake mechanism
+`fabric/ontology/deploy_dimension_lakehouse.py` uses for the dimension
+CSVs, just without a "Load Table" step — these are documents, not
+tabular data).
+[`deploy_search_indexer.py`](deploy_search_indexer.py) configures the
+full Azure AI Search chain: a OneLake files data source, an index (with
+a semantic configuration), an indexer, a `searchIndex`-kind knowledge
+source wrapping the index, and — since it's just another Search
+data-plane object (`PUT .../knowledgebases/{name}`, `api-version=2026-05-01-preview`)
+— the Foundry IQ **knowledge base** itself, with
+`outputMode: "extractiveData"` and `retrievalReasoningEffort: "minimal"`
+(the reasoning tier that needs no attached model deployment). All
+wired into `infra/fabric.tf` as `null_resource`s and run on
+`terraform apply` — see `infra/README.md`'s "Foundry IQ knowledge base"
+section for the requirements involved (workspace role must be
+Contributor, not Viewer; document keys need a `base64Encode` field
+mapping; the index needs a semantic configuration; the Search service
+needs semantic ranking enabled). Confirmed live: `4/4` docs indexed, a
+test query for "overdue invoice" correctly surfaces `03-erp-orders.md`,
+and the knowledge base answers questions correctly in the Foundry
+portal.
+
+The Search service still needs to be added as a **Connected resource**
+on the Foundry project — that's a Foundry-project-level setting, not a
+Search-service object, so it has no equivalent REST/Terraform path
+here; see [`foundry-iq-setup.md`](foundry-iq-setup.md).
 
 Once the Coordinator + specialist agents exist (`foundry/agents/`, not
 started yet), each specialist should be scoped to its own document(s) —
