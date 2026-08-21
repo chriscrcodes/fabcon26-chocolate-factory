@@ -223,3 +223,71 @@ output "AZURE_SEARCH_PRINCIPAL_ID" {
   description = "Azure AI Search service's system-assigned managed identity principal ID -- granted a Fabric workspace role in fabric.tf so the OneLake files indexer can read Files/kb/."
   value       = azurerm_search_service.kb.identity[0].principal_id
 }
+
+# ---------------------------------------------------------------------
+# Microsoft Foundry -- project-based (not hub-based), for the Phase 3
+# agent spine (foundry/agents/). `azurerm_cognitive_account` with
+# `kind = "AIServices"` + `project_management_enabled = true`, paired
+# with `azurerm_cognitive_account_project`, is the modern
+# project-only shape -- no Key Vault/Storage Account/Hub dependency,
+# unlike the older `azurerm_ai_foundry`/`azurerm_ai_foundry_project`
+# resource pair (which provisions the legacy hub-based architecture,
+# explicitly unsupported for Foundry IQ knowledge sources and other
+# newer MCP-tool features this project already depends on). Billed
+# per-usage (model calls/deployments), not a flat idle cost like a
+# Fabric capacity.
+# ---------------------------------------------------------------------
+
+resource "azurerm_cognitive_account" "foundry" {
+  name                = "aif-${var.name_prefix}-${local.suffix}"
+  resource_group_name = data.azurerm_resource_group.this.name
+  location            = var.location
+  kind                = "AIServices"
+  sku_name            = "S0"
+
+  # Required before project creation -- "Account must set
+  # CustomSubDomainName before creating projects" (verified live).
+  custom_subdomain_name = "aif-${var.name_prefix}-${local.suffix}"
+
+  project_management_enabled = true
+
+  identity {
+    type = "SystemAssigned"
+  }
+
+  tags = var.tags
+}
+
+resource "azurerm_cognitive_account_project" "chocolate_factory" {
+  name                 = "chocolate-factory"
+  cognitive_account_id = azurerm_cognitive_account.foundry.id
+  location             = azurerm_cognitive_account.foundry.location
+  display_name         = "Chocolate Factory"
+  description          = "FabCon multi-agent demo -- Coordinator + specialist agents over Fabric IQ Ontology, a Fabric Data Agent, and a Foundry IQ knowledge base."
+
+  identity {
+    type = "SystemAssigned"
+  }
+
+  tags = var.tags
+}
+
+output "AZURE_FOUNDRY_ACCOUNT_NAME" {
+  description = "Microsoft Foundry (Cognitive Services AIServices) account name."
+  value       = azurerm_cognitive_account.foundry.name
+}
+
+output "AZURE_FOUNDRY_ACCOUNT_ENDPOINT" {
+  description = "Microsoft Foundry account endpoint."
+  value       = azurerm_cognitive_account.foundry.endpoint
+}
+
+output "AZURE_FOUNDRY_PROJECT_NAME" {
+  description = "Microsoft Foundry project name -- used in the project's own endpoint URL."
+  value       = azurerm_cognitive_account_project.chocolate_factory.name
+}
+
+output "AZURE_FOUNDRY_PRINCIPAL_ID" {
+  description = "Microsoft Foundry account's system-assigned managed identity principal ID."
+  value       = azurerm_cognitive_account.foundry.identity[0].principal_id
+}

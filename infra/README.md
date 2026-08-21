@@ -13,9 +13,16 @@ Fabric together:
   and `time` providers, all defaulting to Azure CLI auth (`az login`), no
   separate setup
 - [`azure.tf`](azure.tf) — variables, resources, and outputs for the
-  Azure Event Hub Namespace + Event Hub + role assignments, that
-  `simulator` streams to and `fabric.tf`'s Connection reads
-  from
+  Azure Event Hub Namespace + Event Hub + role assignments (that
+  `simulator` streams to and `fabric.tf`'s Connection reads from), the
+  Azure AI Search service backing the Foundry IQ knowledge base, and a
+  Microsoft Foundry project (`azurerm_cognitive_account` with
+  `kind = "AIServices"` + `azurerm_cognitive_account_project` — the
+  modern project-only shape, no Key Vault/Storage Account/Hub
+  dependency like the older `azurerm_ai_foundry`/`azurerm_ai_foundry_project`
+  pair, which provisions the legacy hub-based architecture that Foundry
+  IQ knowledge sources explicitly don't support) for the Phase 3 agent
+  spine (`foundry/agents/`)
 - [`fabric.tf`](fabric.tf) — variables, resources, and outputs for the
   whole Fabric side: the capacity itself (`Microsoft.Fabric/capacities`,
   F2 by default, configurable via `fabric_capacity_sku`, provisioned via
