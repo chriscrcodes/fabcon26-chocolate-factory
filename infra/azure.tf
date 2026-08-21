@@ -354,33 +354,44 @@ resource "azapi_resource" "foundry_iq_kb_connection" {
 data "azurerm_client_config" "current" {}
 
 # Project connections wiring the shared Fabric Data Agent and the
-# Fabric IQ Ontology in as RemoteTool MCP tools, using the Foundry
-# project's own managed identity (granted Contributor on the Fabric
-# workspace via fabric.tf's fabric_workspace_role_assignment.
-# foundry_project_contributor) rather than a stored secret -- same
-# pattern as the knowledge base connection above, applied to Fabric's
-# own MCP endpoints instead of Azure AI Search's.
+# Fabric IQ Ontology in as RemoteTool MCP tools, using delegated
+# per-user auth (authType "UserEntraToken") -- genuinely new territory
+# this session, arrived at only after two dead ends:
 #
-# authType is "ProjectManagedIdentity" on both, not the more generic
-# "ManagedIdentity" -- verified live that the API rejects
-# "ManagedIdentity" outright for ANY RemoteTool-category connection:
-# `"AuthType for RemoteTool Connection can only be None, CustomKeys,
-# ProjectManagedIdentity, OAuth2, DeveloperConnection, UserEntraToken,
-# AgentUserImpersonation, AgenticIdentityToken, AgenticUser,
-# UserTokenAndProjectManagedIdentity"` -- so this isn't a Foundry-IQ-
-# specific value as first assumed, it's the only managed-identity-based
-# option for this whole connection category.
+# 1. category "RemoteTool" + authType "ProjectManagedIdentity" (the
+#    knowledge base's pattern): connects fine, but the Fabric Data
+#    Agent itself returns an internal "technical error" for ANY
+#    non-interactive identity (confirmed with both this project's
+#    managed identity and an independent app-only service-principal
+#    token), and the Ontology MCP endpoint has NO application-only
+#    auth path at all per Microsoft's docs
+#    (https://learn.microsoft.com/en-us/azure/foundry/agents/how-to/tools/fabric-iq)
+#    -- both need a real signed-in user's identity, not a service
+#    principal.
+# 2. category "MicrosoftFabric" + authType "AAD" (reverse-engineered
+#    from the Foundry portal's own "Microsoft Fabric" connection
+#    wizard, which fails live with a bare 400 if you take its "Custom
+#    Keys" field labels at face value -- the real live API error is
+#    `"AuthType for MicrosoftFabric Connection can only be AAD,
+#    UserEntraToken"`, and workspace-id/artifact-id turned out to be
+#    plain `metadata`, not `credentials.keys`): creates cleanly and
+#    validates, but every agent query failed with `"Connection
+#    resolution failed"` -- this category+authType combination doesn't
+#    actually resolve to a usable identity at runtime.
 #
-# The Ontology MCP endpoint and its required token audience
-# (https://learn.microsoft.com/en-us/microsoft-copilot-studio/mcp-fabric-iq-ontology)
-# are genuinely new territory for this repo -- confirm live once an
-# agent tries to call it rather than trusting this shape blind.
-#
-# schema_validation_enabled = false on both, same reason as the
-# knowledge base connection above: azapi's bundled schema for this
-# preview API version predates "ProjectManagedIdentity" as an authType
-# and also rejects `properties.audience` outright, even though both are
-# fields the live API accepts and requires for this scenario.
+# What works, confirmed live end to end (real answers back from both
+# the Fabric Data Agent and the Ontology, matching what a direct
+# user-token MCP client gets): category "RemoteTool" + authType
+# "UserEntraToken" + audience "https://analysis.windows.net/powerbi/api"
+# -- the same pattern Microsoft's own docs use for the one concrete
+# non-Ontology example they show (a Data Agent behind a workspace
+# private link), just applied here without the private-link angle.
+# UserEntraToken forwards the calling user's own signed-in identity
+# through to Fabric, which is exactly what both tools need and neither
+# ProjectManagedIdentity nor AAD provided. Tools reference these with
+# the generic `type: "mcp"` shape (same as the knowledge base), not
+# `fabric_iq_preview` -- that type is for the MicrosoftFabric-category
+# connections that didn't work here.
 resource "azapi_resource" "fabric_data_agent_mcp_connection" {
   type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2025-10-01-preview"
   name                      = "fabric-data-agent"
@@ -389,18 +400,13 @@ resource "azapi_resource" "fabric_data_agent_mcp_connection" {
 
   body = {
     properties = {
-      authType      = "ProjectManagedIdentity"
+      authType      = "UserEntraToken"
       category      = "RemoteTool"
       target        = "https://api.fabric.microsoft.com/v1/mcp/workspaces/${local.workspace_id}/dataagents/${fabric_data_agent.business.id}/agent"
+      audience      = "https://analysis.windows.net/powerbi/api"
       isSharedToAll = true
-      audience      = "https://api.fabric.microsoft.com/"
-      metadata = {
-        ApiType = "Azure"
-      }
     }
   }
-
-  depends_on = [fabric_workspace_role_assignment.foundry_project_contributor]
 }
 
 resource "azapi_resource" "fabric_iq_ontology_mcp_connection" {
@@ -411,18 +417,13 @@ resource "azapi_resource" "fabric_iq_ontology_mcp_connection" {
 
   body = {
     properties = {
-      authType      = "ProjectManagedIdentity"
+      authType      = "UserEntraToken"
       category      = "RemoteTool"
-      target        = "https://agent365.svc.cloud.microsoft/agents/tenants/${data.azurerm_client_config.current.tenant_id}/servers/mcp_FabricIQOntology/workspaces/${local.workspace_id}/ontologies/${data.external.ontology_item.result.id}"
+      target        = "https://api.fabric.microsoft.com/v1/mcp/dataPlane/workspaces/${local.workspace_id}/items/${data.external.ontology_item.result.id}/ontologyEndpoint"
+      audience      = "https://analysis.windows.net/powerbi/api"
       isSharedToAll = true
-      audience      = "https://api.fabric.microsoft.com/"
-      metadata = {
-        ApiType = "Azure"
-      }
     }
   }
-
-  depends_on = [fabric_workspace_role_assignment.foundry_project_contributor]
 }
 
 # gpt-5.4-mini -- cheapest Generally Available model at the time of

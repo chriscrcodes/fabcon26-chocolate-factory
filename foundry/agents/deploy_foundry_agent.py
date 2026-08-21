@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Create (or update) the single Foundry Agent Service agent for the
-FabCon demo's agent spine -- one generalist agent wired to two domains
-via MCP tools so far, per the plan's "leanest starting point" (see
+FabCon demo's agent spine -- one generalist agent wired to all three
+domains, per the plan's "leanest starting point" (see
 ../../.claude/plans -- Coordinator + specialists is a later decision,
 made only if this single agent's answer quality needs it).
 
@@ -11,62 +11,56 @@ Foundry Agent Service's exact `agents` API shape isn't in any
 Terraform provider, and its own docs (foundry-iq-connect) call it via
 raw `requests` too, not an SDK method.
 
-Tools, each a generic `mcp` tool pointed at an already-created project
-connection (infra/azure.tf) rather than a bare server_url + static
-bearer header -- Microsoft's own docs say static secrets aren't
-accepted in MCP tool headers; routing through a stored connection is
-the documented alternative:
+All three tools use the generic `type: "mcp"` shape, each referencing
+an already-created project connection (infra/azure.tf) rather than a
+bare server_url + static bearer header -- Microsoft's own docs say
+static secrets aren't accepted in MCP tool headers; routing through a
+stored connection is the documented alternative.
 
-- chocolate-factory-kb   -- Foundry IQ knowledge base (Factory/Quality,
-  Supply Chain, ERP domain docs), allowed_tools restricted to
-  knowledge_base_retrieve. Required the Search service's authOptions
-  switched from apiKeyOnly to aadOrApiKey (infra/azure.tf) -- RBAC role
-  assignments alone don't matter if the service rejects AAD tokens
-  outright.
-- fabric-data-agent      -- the shared Fabric Data Agent (Eventhouse:
-  quality checks, line status).
+- **`knowledge_base`** -- connection `chocolate-factory-kb`, category
+  `RemoteTool`, authType `ProjectManagedIdentity` (service-to-service:
+  the project's own identity, fine for a knowledge base). Foundry IQ
+  knowledge base (Factory/Quality, Supply Chain, ERP domain docs),
+  `allowed_tools` restricted to `knowledge_base_retrieve`. Required the
+  Search service's authOptions switched from apiKeyOnly to aadOrApiKey
+  (infra/azure.tf) -- RBAC role assignments alone don't matter if the
+  service rejects AAD tokens outright.
+- **`fabric_data_agent`/`fabric_iq_ontology`** -- connections
+  `fabric-data-agent`/`fabric-iq-ontology`, category `RemoteTool`,
+  authType **`UserEntraToken`** (forwards the calling user's own
+  signed-in identity, not a service principal). Both Fabric tools
+  genuinely need this: the Fabric Data Agent returns an internal
+  "technical error" for ANY non-interactive identity (confirmed with
+  both the project's managed identity and an independent app-only
+  service-principal token -- both get a real MCP response, just an
+  error from the Data Agent's own answer synthesis, not an
+  auth/transport failure), and the Ontology MCP endpoint has NO
+  application-only auth path at all per Microsoft's docs
+  (https://learn.microsoft.com/en-us/azure/foundry/agents/how-to/tools/fabric-iq)
+  -- delegated auth is the only option for it. `UserEntraToken` +
+  `audience: "https://analysis.windows.net/powerbi/api"` is the one
+  combination confirmed live to actually work end to end (real,
+  correct answers back from both tools, matching what a direct
+  user-token MCP client gets) -- see infra/azure.tf's
+  `fabric_data_agent_mcp_connection`/`fabric_iq_ontology_mcp_connection`
+  comments for the two dead ends ruled out first (`ProjectManagedIdentity`,
+  and a `MicrosoftFabric`-category `AAD` connection reverse-engineered
+  from the Foundry portal's own broken "Microsoft Fabric" wizard, which
+  creates cleanly but fails every query with "Connection resolution
+  failed"). Tool type stays the generic `mcp`, not `fabric_iq_preview`
+  -- that type is for `MicrosoftFabric`-category connections, which
+  aren't what's used here.
 
-The Fabric IQ Ontology tool is deliberately NOT included yet. It's a
-different Fabric item type with a different auth model: unlike the
-above two (ProjectManagedIdentity, a pure service-to-service flow),
-Microsoft's own docs
-(https://learn.microsoft.com/en-us/azure/foundry/agents/how-to/tools/fabric-iq)
-say ontology connections require Microsoft Entra delegated
-(On-Behalf-Of) auth via a BYO Entra app or managed OAuth -- there is no
-application-only/managed-identity path for it at all. Getting there
-needs: (1) a dedicated Entra app registration with Power BI Service
-delegated permissions Item.Execute.All + Item.Read.All and tenant-wide
-admin consent (done -- app f750d801-54b1-4d98-9c95-367550802361), then
-(2) a project connection with authType OAuth2 carrying that app's
-client ID/secret plus the Entra authorization/token/refresh URLs and
-Power BI scopes. Step (2) is paused: the Foundry portal's own "New
-connection > Fabric IQ" wizard collects Token URL/Refresh URL/Scopes
-fields that don't appear anywhere in the documented
-`Microsoft.MachineLearningServices/workspaces/connections` ARM schema
-(WorkspaceConnectionOAuth2 only has authUrl/clientId/clientSecret/
-developerToken/password/refreshToken/tenantId/username) -- the
-portal's extra mapping isn't publicly documented, so this one
-connection needs to be created through the Foundry portal UI by hand
-rather than guessed at over raw REST. Once that connection exists (any
-name), add a `fabric_iq_preview`-type tool (not `mcp`) referencing it
-by `project_connection_id`, pointed at
-`https://api.fabric.microsoft.com/v1/mcp/dataPlane/workspaces/{workspace}/items/{ontologyItemId}/ontologyEndpoint`.
-The first query from each user will need an interactive OAuth consent
-(delegated auth, not shared identity) -- expect a `CONSENT_REQUIRED`
-response with a consent link on first use per user.
-
-Note also that even the Agent 365-hosted ontology MCP endpoint
-(agent365.svc.cloud.microsoft/.../mcp_FabricIQOntology/...), which an
-earlier version of this script pointed at, is the WRONG endpoint for a
-Foundry agent -- that one is for Copilot Studio/M365 Copilot consumers
-and is gated to Frontier-program tenants. The native
-api.fabric.microsoft.com one above is the one Foundry agents should
-use.
+  Also note: an early version of the Ontology connection pointed at
+  agent365.svc.cloud.microsoft (Agent 365/Copilot Studio
+  infrastructure, gated to Frontier-program tenants) -- the wrong
+  endpoint for a Foundry agent entirely. The native
+  `api.fabric.microsoft.com/v1/mcp/.../ontologyEndpoint` endpoint used
+  now is the correct one.
 
 Usage:
     AZURE_FOUNDRY_ACCOUNT_NAME=... AZURE_FOUNDRY_PROJECT_NAME=... \\
-    AZURE_FOUNDRY_MODEL_DEPLOYMENT_NAME=... FABRIC_WORKSPACE_ID=... \\
-    FABRIC_DATA_AGENT_ID=... AZURE_SEARCH_SERVICE_NAME=... \\
+    AZURE_FOUNDRY_MODEL_DEPLOYMENT_NAME=... AZURE_SEARCH_SERVICE_NAME=... \\
         uv run --with azure-identity --with requests \\
         deploy_foundry_agent.py
 """
@@ -92,25 +86,27 @@ def agent_exists(session: requests.Session, project_endpoint: str) -> bool:
 
 
 def build_definition() -> dict:
+    search_service = os.environ["AZURE_SEARCH_SERVICE_NAME"]
     workspace_id = os.environ["FABRIC_WORKSPACE_ID"]
     data_agent_id = os.environ["FABRIC_DATA_AGENT_ID"]
-    search_service = os.environ["AZURE_SEARCH_SERVICE_NAME"]
+    ontology_item_id = os.environ["FABRIC_ONTOLOGY_ITEM_ID"]
 
     return {
         "model": os.environ["AZURE_FOUNDRY_MODEL_DEPLOYMENT_NAME"],
         "kind": "prompt",
         "instructions": (
-            "You are the chocolate factory's assistant, grounded in two "
-            "tools: the knowledge_base tool for policy/definition "
+            "You are the chocolate factory's assistant, grounded in "
+            "three tools: the knowledge_base tool for policy/definition "
             "questions (what counts as an overdue invoice, substitution "
-            "rules, quality metric definitions), and the fabric_data_agent "
+            "rules, quality metric definitions), the fabric_data_agent "
             "tool for Factory/Quality telemetry aggregates (quality "
-            "checks, line status). Pick the tool that matches the "
-            "question's shape, cite which tool you used, and say plainly "
-            "when a question needs data neither of these two cover "
-            "(e.g. Supply Chain/ERP relationship questions -- the "
-            "Ontology tool for those isn't wired up yet) rather than "
-            "guessing."
+            "checks, line status), and the fabric_iq_ontology tool for "
+            "structured relationship questions across Factory, Quality, "
+            "Supply Chain, and ERP entities (e.g. which supplier feeds "
+            "which recipe, which batch used which line). Pick the tool "
+            "that matches the question's shape, cite which tool you "
+            "used, and say plainly when a question needs data none of "
+            "these three cover rather than guessing."
         ),
         "tools": [
             {
@@ -125,8 +121,15 @@ def build_definition() -> dict:
                 "type": "mcp",
                 "server_label": "fabric_data_agent",
                 "server_url": f"https://api.fabric.microsoft.com/v1/mcp/workspaces/{workspace_id}/dataagents/{data_agent_id}/agent",
-                "require_approval": "never",
                 "project_connection_id": "fabric-data-agent",
+                "require_approval": "never",
+            },
+            {
+                "type": "mcp",
+                "server_label": "fabric_iq_ontology",
+                "server_url": f"https://api.fabric.microsoft.com/v1/mcp/dataPlane/workspaces/{workspace_id}/items/{ontology_item_id}/ontologyEndpoint",
+                "project_connection_id": "fabric-iq-ontology",
+                "require_approval": "never",
             },
         ],
     }

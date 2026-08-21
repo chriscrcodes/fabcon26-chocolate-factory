@@ -234,23 +234,6 @@ resource "fabric_workspace_role_assignment" "search_contributor" {
   role = "Contributor"
 }
 
-# Lets the Foundry project's own managed identity query the shared
-# Fabric Data Agent and the Fabric IQ Ontology, both over MCP, via
-# `azapi_resource.fabric_data_agent_mcp_connection` and
-# `.fabric_iq_ontology_mcp_connection` in azure.tf -- same
-# ManagedIdentity/RemoteTool connection pattern as the Foundry IQ
-# knowledge base connection, applied to Fabric's own MCP endpoints
-# instead of Azure AI Search's.
-resource "fabric_workspace_role_assignment" "foundry_project_contributor" {
-  workspace_id = local.workspace_id
-
-  principal = {
-    id   = azurerm_cognitive_account_project.chocolate_factory.identity[0].principal_id
-    type = "ServicePrincipal"
-  }
-  role = "Contributor"
-}
-
 # Configures the Search-side plumbing (data source + index + indexer)
 # that indexes Files/kb/ straight out of OneLake -- the Foundry IQ
 # knowledge base itself, on top of this index, has no documented
@@ -569,14 +552,23 @@ resource "null_resource" "deploy_ontology" {
 # REST call -- there's no Terraform-native resource/attribute for it
 # since the item itself is created out-of-band by
 # null_resource.deploy_ontology's local-exec script, not a Terraform
-# resource. Feeds the Ontology MCP endpoint URL
-# (azure.tf's azapi_resource.fabric_iq_ontology_mcp_connection).
+# resource. No Terraform resource currently consumes this (the Fabric
+# IQ Ontology's Foundry connection needs delegated/BYO-Entra auth,
+# created manually through the Foundry portal -- see
+# foundry/agents/deploy_foundry_agent.py's docstring), but the ID is
+# needed by hand for that manual step, so it's surfaced as a plain
+# output below rather than left undiscoverable.
 data "external" "ontology_item" {
   depends_on = [null_resource.deploy_ontology]
   program    = ["uv", "run", "--with", "azure-identity", "--with", "requests", "${path.module}/../fabric/ontology/get_ontology_item_id.py"]
   query = {
     workspace_id = local.workspace_id
   }
+}
+
+output "FABRIC_ONTOLOGY_ITEM_ID" {
+  description = "Fabric IQ Ontology item ID -- {itemId} in the Ontology MCP endpoint URL, needed for the manual Foundry portal connection (Fabric IQ / Microsoft Fabric tile)."
+  value       = data.external.ontology_item.result.id
 }
 
 output "FABRIC_CAPACITY_ID" {
