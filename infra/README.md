@@ -22,7 +22,11 @@ Fabric together:
   dependency like the older `azurerm_ai_foundry`/`azurerm_ai_foundry_project`
   pair, which provisions the legacy hub-based architecture that Foundry
   IQ knowledge sources explicitly don't support) for the Phase 3 agent
-  spine (`foundry/agents/`)
+  spine (`foundry/agents/`) -- including the 3 `azapi_resource` project
+  connections (knowledge base, Fabric Data Agent, Fabric IQ Ontology)
+  and the `null_resource` that deploys the actual Foundry Agent Service
+  agent itself (`foundry/agents/deploy_foundry_agent.py`) wired to all
+  3 as tools
 - [`fabric.tf`](fabric.tf) — variables, resources, and outputs for the
   whole Fabric side: the capacity itself (`Microsoft.Fabric/capacities`,
   F2 by default, configurable via `fabric_capacity_sku`, provisioned via
@@ -57,9 +61,15 @@ Fabric together:
 Deployed and verified end to end against a real tenant: `terraform apply`
 provisions the F2 capacity, workspace, Eventhouse, KQL database,
 Connection, Eventstream, Bronze/Silver/Gold KQL + reference data,
-dimension Lakehouse, Fabric SQL Database + Supply Chain/ERP data, and
-Fabric IQ Ontology, and `simulator`
-streams events all the way through to the Gold layer.
+dimension Lakehouse, Fabric SQL Database + Supply Chain/ERP data,
+Fabric IQ Ontology, the Foundry IQ knowledge base, the Foundry project
+and model deployment, all 3 agent tool connections, and the Foundry
+Agent Service agent itself, wired to all 3 tools -- and `simulator`
+streams events all the way through to the Gold layer. One
+`terraform apply` against an existing resource group in any
+subscription/tenant reproduces the whole stack; see "Reproducing on a
+different subscription" below for the couple of things that are
+genuinely outside Terraform's reach.
 
 Event Hub auth, chosen by whether a workspace identity is available
 (`workspace_identity_principal_id`, resolved automatically from
@@ -96,6 +106,46 @@ connection to the Kusto endpoint — export `SSL_CERT_FILE` /
 `REQUESTS_CA_BUNDLE` pointing at a CA bundle that includes your
 org's root CA before running `terraform apply` (a local-machine
 fix, not something this config bakes in).
+
+### Reproducing on a different subscription
+
+Everything above is a single `terraform apply` against any subscription
+with an existing resource group — nothing in `.tf` files is hardcoded
+to this specific subscription, tenant, or resource names (checked live:
+no subscription/tenant GUIDs anywhere in `.tf`; every ID comes from
+`data.azurerm_client_config.current` or a variable). Two things are
+still outside Terraform's reach, both genuine platform gaps rather than
+missing config here:
+
+- **Fabric IQ region availability.** Per Microsoft's own docs, Fabric
+  IQ (the Ontology's underlying workload) "isn't available in regions
+  where Power BI is the only Fabric workload" — confirm the target
+  `var.location` supports the full Fabric stack before applying
+  ([Fabric region availability](https://learn.microsoft.com/en-us/fabric/admin/region-availability#power-bi)).
+  Not something Terraform can validate without an extra API call, so
+  it isn't enforced here.
+- **Whoever *queries* the agent needs their own real Fabric workspace
+  access — this is not automated by `terraform apply` and is not the
+  same person/identity as "whoever ran `terraform apply`" unless
+  they're the same.** Two of the agent's three tools
+  (`fabric_data_agent`, `fabric_iq_ontology`) use `authType:
+  "UserEntraToken"` connections, which forward the *calling user's own
+  signed-in identity* to Fabric — verified live to be the only
+  combination that actually works (see `foundry/agents/README.md`'s
+  "The Foundry agent" section for why `ProjectManagedIdentity` and a
+  `MicrosoftFabric`-category connection both failed). Whoever runs
+  `terraform apply` automatically becomes the Fabric workspace's Admin
+  (Fabric's own behavior for the workspace creator, not something this
+  config grants), so that person can query the agent successfully
+  right away. Anyone else who needs to query it — a different demo
+  presenter, a teammate testing independently — needs an explicit
+  Fabric workspace role of their own
+  (`fabric_workspace_role_assignment` in `fabric.tf` shows the
+  pattern, e.g. the `search_contributor` block) before their queries
+  to the two Fabric tools will succeed; without it, expect the same
+  "technical error"/`403` failures documented for non-interactive
+  identities, since an unauthorized real user hits the same wall a
+  service principal does.
 
 ### Capacity and trial-tenant limitation
 

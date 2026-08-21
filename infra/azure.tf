@@ -489,3 +489,49 @@ output "AZURE_FOUNDRY_PRINCIPAL_ID" {
   description = "Microsoft Foundry account's system-assigned managed identity principal ID."
   value       = azurerm_cognitive_account.foundry.identity[0].principal_id
 }
+
+# Creates/updates the actual Foundry Agent Service agent
+# (chocolate-factory-agent) wired to all 3 tools above -- like the
+# Fabric IQ Ontology and search indexer deployments, this is a direct
+# REST call via a script, not a Terraform-native resource: the
+# `agents` API isn't modeled by any provider (see
+# foundry/agents/deploy_foundry_agent.py's docstring for the full
+# tool/connection/auth story). Needs the deploying identity to have
+# already been granted "Cognitive Services User" on the project
+# (azurerm_role_assignment.deployer_cognitive_services_user) -- that's
+# a separate authorization surface from being Owner/Contributor on the
+# resource group, and its absence fails with a 403 on
+# `AIServices/agents/read`, not a permissions error anyone would
+# immediately connect to Terraform.
+resource "null_resource" "deploy_foundry_agent" {
+  depends_on = [
+    azurerm_role_assignment.deployer_cognitive_services_user,
+    azurerm_cognitive_deployment.agent_model,
+    azapi_resource.foundry_iq_kb_connection,
+    azapi_resource.fabric_data_agent_mcp_connection,
+    azapi_resource.fabric_iq_ontology_mcp_connection,
+  ]
+
+  triggers = {
+    files_hash = filesha256("${path.module}/../foundry/agents/deploy_foundry_agent.py")
+  }
+
+  provisioner "local-exec" {
+    command = "uv run --with azure-identity --with requests ${path.module}/../foundry/agents/deploy_foundry_agent.py"
+
+    environment = {
+      AZURE_FOUNDRY_ACCOUNT_NAME          = azurerm_cognitive_account.foundry.name
+      AZURE_FOUNDRY_PROJECT_NAME          = azurerm_cognitive_account_project.chocolate_factory.name
+      AZURE_FOUNDRY_MODEL_DEPLOYMENT_NAME = azurerm_cognitive_deployment.agent_model.name
+      AZURE_SEARCH_SERVICE_NAME           = azurerm_search_service.kb.name
+      FABRIC_WORKSPACE_ID                 = local.workspace_id
+      FABRIC_DATA_AGENT_ID                = fabric_data_agent.business.id
+      FABRIC_ONTOLOGY_ITEM_ID             = data.external.ontology_item.result.id
+    }
+  }
+}
+
+output "AZURE_FOUNDRY_AGENT_NAME" {
+  description = "The Foundry Agent Service agent's name -- pass this in agent_reference when querying it."
+  value       = "chocolate-factory-agent"
+}

@@ -3,6 +3,13 @@
 resource_group_name = "<your-rg>"
 name_prefix          = "cacao"
 
+# Defaults to "westeurope" if omitted. Fabric IQ (the Ontology's
+# underlying workload) isn't available in regions where Power BI is
+# the only Fabric workload -- confirm your target region supports the
+# full Fabric stack before applying:
+# https://learn.microsoft.com/en-us/fabric/admin/region-availability#power-bi
+# location = "westeurope"
+
 # Get with: az ad signed-in-user show --query id -o tsv
 user_object_id = "<YOUR_AAD_OBJECT_ID>"
 
