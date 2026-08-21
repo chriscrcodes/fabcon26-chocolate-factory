@@ -54,10 +54,13 @@ test query for "overdue invoice" correctly surfaces `03-erp-orders.md`,
 and the knowledge base answers questions correctly in the Foundry
 portal.
 
-The Search service still needs to be added as a **Connected resource**
-on the Foundry project — that's a Foundry-project-level setting, not a
-Search-service object, so it has no equivalent REST/Terraform path
-here; see [`foundry-iq-setup.md`](foundry-iq-setup.md).
+The Search service is registered as a **Connected resource** on the
+Foundry project, and the knowledge base is exposed as a `RemoteTool`
+MCP connection an agent can call, both via `azapi_resource` in
+`infra/azure.tf` (no native `azurerm` resource covers this) — see
+[`foundry-iq-setup.md`](foundry-iq-setup.md) and `infra/README.md`'s
+"Wiring the knowledge base into the Foundry project as an agent tool"
+section.
 
 Once the Coordinator + specialist agents exist (`foundry/agents/`, not
 started yet), each specialist should be scoped to its own document(s) —

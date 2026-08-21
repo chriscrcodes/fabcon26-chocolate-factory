@@ -1,4 +1,4 @@
-# Manual step: connecting the Foundry project to the knowledge base
+# Connecting the Foundry project to the knowledge base
 
 The Foundry IQ knowledge base itself (`chocolate-factory-kb`) is fully
 provisioned by `terraform apply` — see [`README.md`](README.md) and
@@ -6,39 +6,24 @@ provisioned by `terraform apply` — see [`README.md`](README.md) and
 `deploy_search_indexer.py` creates the data source, index, indexer,
 knowledge source, and knowledge base end to end.
 
-The one remaining manual step is project-level, not a Search-service
-object, so it has no REST/Terraform equivalent here: the Foundry
-project needs the Azure AI Search service registered as a **Connected
-resource** before its portal can see or query the knowledge base.
+The Foundry project's **Connected resource** to that Search service,
+and the project-level **connection** that exposes the knowledge base
+as an MCP tool an agent can call, are also both provisioned by
+`terraform apply` — `azurerm_role_assignment.foundry_project_search_reader`
+and `azapi_resource.foundry_iq_kb_connection` in `infra/azure.tf`. See
+that file and `infra/README.md`'s "Wiring the knowledge base into the
+Foundry project as an agent tool" section for why this needed
+`azapi_resource` rather than a native `azurerm` resource. Nothing here
+requires a manual portal step anymore.
 
-## Prerequisites
+## Prerequisite: the Foundry project itself
 
-- **A Foundry project** — specifically a *project-based* Foundry
-  resource, not a hub-based one. If you don't have a Foundry project
-  yet, create one first in the [Microsoft Foundry portal](https://ai.azure.com/)
-  — this is a separate Azure resource from anything `infra` provisions,
-  and isn't part of this repo's Terraform state.
-- **RBAC**, on top of whatever role got you access to the Foundry
-  project itself: **Search Index Data Reader** (or Contributor) on the
-  Azure AI Search service, so the Foundry project can query the index.
-
-## Values you'll need
-
-Pull these from `infra` (`terraform output`, run from `infra/`):
-
-| Value | Terraform output | Where it's used |
-|---|---|---|
-| Search service name | `AZURE_SEARCH_SERVICE_NAME` | Connected resource |
-
-## Steps
-
-1. Open the [Microsoft Foundry portal](https://ai.azure.com/) and
-   switch into your Foundry project.
-2. Management Center → Connected resources → New connection → Azure AI
-   Search → select the service (`AZURE_SEARCH_SERVICE_NAME` above).
-3. In the left nav, go to **Build → Knowledge**. The
-   **`chocolate-factory-kb`** knowledge base should already be listed —
-   no creation step needed, it was provisioned by `terraform apply`.
+**A Foundry project** — specifically a *project-based* Foundry
+resource, not a hub-based one — must exist before this can apply.
+`infra/azure.tf` provisions one (`azurerm_cognitive_account` +
+`azurerm_cognitive_account_project`), so running `terraform apply`
+from `infra/` creates it if it doesn't already exist; no separate
+manual creation step is needed.
 
 ## Verifying it worked
 
@@ -57,9 +42,10 @@ domain doc:
 - *"What does CrystalFormIndex measure?"* → should ground in
   `01-factory-quality.md`.
 
-If the knowledge base doesn't appear in the portal at all, the
-Connected resource step above is the most likely gap — confirm it in
-Management Center before checking anything else.
+If the knowledge base doesn't appear in the portal at all, check
+Management Center → Connected resources for the Azure AI Search
+service (`AZURE_SEARCH_SERVICE_NAME` from `terraform output`) before
+checking anything else.
 
 If it appears but answers come back ungrounded or wrong, check whether
 the underlying Search index actually has the expected content:
@@ -78,8 +64,9 @@ troubleshooting the Foundry-side knowledge base at all.
 
 ## What this doesn't cover
 
-Attaching this knowledge base to a specialist agent (Phase 3) is a
-separate, automatable step once agents exist — see
-`foundry/kb/README.md`'s "Deploying" section and the FabCon demo plan's
-Phase 2.5 write-up for the MCP connection details
+Attaching this knowledge base's connection
+(`AZURE_FOUNDRY_KB_CONNECTION_NAME` output, `chocolate-factory-kb`) to
+a specific agent's tool list is a separate, per-agent step once an
+agent exists — see `foundry/kb/README.md`'s "Deploying" section and the
+FabCon demo plan's Phase 2.5 write-up for the MCP connection details
 (`allowed_tools: ["knowledge_base_retrieve"]`).

@@ -302,8 +302,42 @@ Requirements beyond the documented happy path:
   fields like `outputMode`/`retrievalReasoningEffort`.
 - `retrievalReasoningEffort: {"kind": "minimal"}` is the one reasoning
   tier that doesn't require an attached model deployment; Low/Medium do.
+- **The Search service must accept AAD tokens, not just API keys, for
+  any RemoteTool/ProjectManagedIdentity connection to it to work.**
+  `azurerm_search_service` defaults to `authOptions: apiKeyOnly`, which
+  rejects every AAD/RBAC token outright regardless of role assignments
+  -- a role assignment being correct and 40+ minutes old is not the
+  same as the service accepting AAD auth at all. `azurerm_search_service.kb`'s
+  `authentication_failure_mode = "http403"` argument is what flips this
+  to `aadOrApiKey` (verified live via `az search service show
+  --query authOptions`; the argument has no description in the
+  provider's own schema, so this isn't obvious from `terraform plan`
+  alone).
 
-**Not covered by this Terraform state**: adding the Search service as a
-Connected resource on the Foundry project, a project-level setting with
-no Search-service-object equivalent, so no REST/Terraform path applies.
-See `foundry/kb/foundry-iq-setup.md` for that one remaining manual step.
+**Wiring the knowledge base into the Foundry project as an agent tool**
+is a project-level connection, not a Search-service-object setting, so
+it lives in `azure.tf` alongside the project rather than in
+`foundry/kb/`. No `azurerm` resource models it:
+`azurerm_cognitive_account_connection_*` is account-scoped, not
+project-scoped, and its `category` argument is hard-validated to
+`["AIServices", "AzureKeyVault", "AzureOpenAI", "AzureStorageAccount"]`
+— `"RemoteTool"` is rejected by `terraform validate` itself, before any
+API call. `azapi_resource.foundry_iq_kb_connection` calls the ARM
+connections API directly instead
+(`Microsoft.CognitiveServices/accounts/projects/connections@2025-10-01-preview`,
+`PUT`/`DELETE` on
+`.../accounts/{account}/projects/{project}/connections/{name}`), the
+same endpoint
+[Microsoft's own Foundry IQ docs](https://learn.microsoft.com/en-us/azure/foundry/agents/how-to/foundry-iq-connect)
+use directly via `requests.put(...)` rather than an SDK method — there
+is no `AIProjectClient` method for creating this connection either.
+`schema_validation_enabled = false` is required on that resource: the
+`azapi` provider's bundled schema for this preview API version
+predates `authType: "ProjectManagedIdentity"` and rejects it
+client-side even though the live API accepts it (confirmed against the
+docs above, which require exactly that value for this scenario — the
+alternative `ManagedIdentity` value `azapi` suggests instead is not the
+same auth type). Auth to call the connection API itself is a normal
+ARM/management-plane token (`https://management.azure.com/.default`),
+distinct from the Foundry project's own data-plane token scope used
+later to create/invoke an agent.

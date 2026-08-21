@@ -193,6 +193,16 @@ resource "azurerm_search_service" "kb" {
   location            = var.location
   sku                 = "basic"
 
+  # Undocumented in the provider's own schema (no description string),
+  # but live-verified: setting this at all is what flips the service's
+  # authOptions from the default apiKeyOnly to aadOrApiKey -- without
+  # it, every AAD/RBAC token is rejected regardless of role
+  # assignments (this is what silently broke the Foundry IQ knowledge
+  # base tool: the project identity already had Search Index Data
+  # Reader for 40+ minutes, the role was never the problem, the service
+  # just wasn't accepting AAD tokens at all).
+  authentication_failure_mode = "http403"
+
   # Semantic ranking is disabled by default at the service level, a
   # separate control-plane setting from an index's own
   # semantic.configurations[] block (foundry/kb/deploy_search_indexer.py).
@@ -272,6 +282,149 @@ resource "azurerm_cognitive_account_project" "chocolate_factory" {
   tags = var.tags
 }
 
+# Foundry Agent Service's data-plane API (deploy_foundry_agent.py's
+# POST .../agents) is a separate authorization surface from ARM --
+# being the deploying user/Owner on the resource group isn't enough.
+# Verified live: calling GET .../agents with only that access returns
+# `403 ... does not have permissions for
+# Microsoft.CognitiveServices/accounts/AIServices/agents/read actions`.
+#
+# "Azure AI Developer" (the role Microsoft's own docs point to,
+# https://learn.microsoft.com/en-us/azure/foundry/concepts/rbac-foundry)
+# does NOT actually grant this in this tenant -- checked its live
+# definition (`az role definition list --name "Azure AI Developer"`)
+# and its dataActions are scoped to OpenAI/SpeechServices/
+# ContentSafety/MaaS only, no `AIServices/agents/*` action at all. Of
+# the built-in roles with a `Microsoft.CognitiveServices/*` dataActions
+# wildcard, "Cognitive Services User" is the least-privileged one that
+# actually covers agent operations -- "Azure AI Developer" stayed a
+# 403 for over 10 minutes, ruling out propagation delay as the cause.
+resource "azurerm_role_assignment" "deployer_cognitive_services_user" {
+  scope                = azurerm_cognitive_account_project.chocolate_factory.id
+  role_definition_name = "Cognitive Services User"
+  principal_id         = data.azurerm_client_config.current.object_id
+}
+
+# Lets the project's own managed identity query the Foundry IQ
+# knowledge base's Azure AI Search index -- the "ProjectManagedIdentity"
+# auth path for the RemoteTool/MCP connection below, avoiding an
+# admin-key secret the project would otherwise have to store.
+resource "azurerm_role_assignment" "foundry_project_search_reader" {
+  scope                = azurerm_search_service.kb.id
+  role_definition_name = "Search Index Data Reader"
+  principal_id         = azurerm_cognitive_account_project.chocolate_factory.identity[0].principal_id
+}
+
+# Project connection wiring the Foundry IQ knowledge base's MCP endpoint
+# in as a "RemoteTool" the agent can call. No azurerm resource models
+# this: azurerm_cognitive_account_connection_* is account-scoped, not
+# project-scoped, and its `category` argument is hard-validated to
+# ["AIServices", "AzureKeyVault", "AzureOpenAI", "AzureStorageAccount"]
+# -- "RemoteTool" is rejected at `terraform validate` time, before any
+# API call is even made. azapi_resource calls the ARM connections API
+# Microsoft's own docs use directly instead
+# (https://learn.microsoft.com/en-us/azure/foundry/agents/how-to/foundry-iq-connect).
+resource "azapi_resource" "foundry_iq_kb_connection" {
+  type      = "Microsoft.CognitiveServices/accounts/projects/connections@2025-10-01-preview"
+  name      = "chocolate-factory-kb"
+  parent_id = azurerm_cognitive_account_project.chocolate_factory.id
+
+  # azapi's bundled schema for this preview API version predates
+  # "ProjectManagedIdentity" as an authType and rejects it client-side
+  # even though it's the value Microsoft's own docs require for this
+  # exact scenario (see comment above) -- the live API accepts it fine.
+  schema_validation_enabled = false
+
+  body = {
+    properties = {
+      authType      = "ProjectManagedIdentity"
+      category      = "RemoteTool"
+      target        = "https://${azurerm_search_service.kb.name}.search.windows.net/knowledgebases/chocolate-factory-kb/mcp?api-version=2026-05-01-preview"
+      isSharedToAll = true
+      audience      = "https://search.azure.com/"
+      metadata = {
+        ApiType = "Azure"
+      }
+    }
+  }
+
+  depends_on = [azurerm_role_assignment.foundry_project_search_reader]
+}
+
+data "azurerm_client_config" "current" {}
+
+# Project connections wiring the shared Fabric Data Agent and the
+# Fabric IQ Ontology in as RemoteTool MCP tools, using the Foundry
+# project's own managed identity (granted Contributor on the Fabric
+# workspace via fabric.tf's fabric_workspace_role_assignment.
+# foundry_project_contributor) rather than a stored secret -- same
+# pattern as the knowledge base connection above, applied to Fabric's
+# own MCP endpoints instead of Azure AI Search's.
+#
+# authType is "ProjectManagedIdentity" on both, not the more generic
+# "ManagedIdentity" -- verified live that the API rejects
+# "ManagedIdentity" outright for ANY RemoteTool-category connection:
+# `"AuthType for RemoteTool Connection can only be None, CustomKeys,
+# ProjectManagedIdentity, OAuth2, DeveloperConnection, UserEntraToken,
+# AgentUserImpersonation, AgenticIdentityToken, AgenticUser,
+# UserTokenAndProjectManagedIdentity"` -- so this isn't a Foundry-IQ-
+# specific value as first assumed, it's the only managed-identity-based
+# option for this whole connection category.
+#
+# The Ontology MCP endpoint and its required token audience
+# (https://learn.microsoft.com/en-us/microsoft-copilot-studio/mcp-fabric-iq-ontology)
+# are genuinely new territory for this repo -- confirm live once an
+# agent tries to call it rather than trusting this shape blind.
+#
+# schema_validation_enabled = false on both, same reason as the
+# knowledge base connection above: azapi's bundled schema for this
+# preview API version predates "ProjectManagedIdentity" as an authType
+# and also rejects `properties.audience` outright, even though both are
+# fields the live API accepts and requires for this scenario.
+resource "azapi_resource" "fabric_data_agent_mcp_connection" {
+  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2025-10-01-preview"
+  name                      = "fabric-data-agent"
+  parent_id                 = azurerm_cognitive_account_project.chocolate_factory.id
+  schema_validation_enabled = false
+
+  body = {
+    properties = {
+      authType      = "ProjectManagedIdentity"
+      category      = "RemoteTool"
+      target        = "https://api.fabric.microsoft.com/v1/mcp/workspaces/${local.workspace_id}/dataagents/${fabric_data_agent.business.id}/agent"
+      isSharedToAll = true
+      audience      = "https://api.fabric.microsoft.com/"
+      metadata = {
+        ApiType = "Azure"
+      }
+    }
+  }
+
+  depends_on = [fabric_workspace_role_assignment.foundry_project_contributor]
+}
+
+resource "azapi_resource" "fabric_iq_ontology_mcp_connection" {
+  type                      = "Microsoft.CognitiveServices/accounts/projects/connections@2025-10-01-preview"
+  name                      = "fabric-iq-ontology"
+  parent_id                 = azurerm_cognitive_account_project.chocolate_factory.id
+  schema_validation_enabled = false
+
+  body = {
+    properties = {
+      authType      = "ProjectManagedIdentity"
+      category      = "RemoteTool"
+      target        = "https://agent365.svc.cloud.microsoft/agents/tenants/${data.azurerm_client_config.current.tenant_id}/servers/mcp_FabricIQOntology/workspaces/${local.workspace_id}/ontologies/${data.external.ontology_item.result.id}"
+      isSharedToAll = true
+      audience      = "https://api.fabric.microsoft.com/"
+      metadata = {
+        ApiType = "Azure"
+      }
+    }
+  }
+
+  depends_on = [fabric_workspace_role_assignment.foundry_project_contributor]
+}
+
 # gpt-5.4-mini -- cheapest Generally Available model at the time of
 # deployment (gpt-4o/gpt-4o-mini were both in "Deprecating" lifecycle
 # state and rejected live: "ServiceModelDeprecating ... cannot be used
@@ -314,6 +467,21 @@ output "AZURE_FOUNDRY_PROJECT_NAME" {
 output "AZURE_FOUNDRY_MODEL_DEPLOYMENT_NAME" {
   description = "Model deployment name to reference when creating an agent."
   value       = azurerm_cognitive_deployment.agent_model.name
+}
+
+output "AZURE_FOUNDRY_KB_CONNECTION_NAME" {
+  description = "Foundry project connection name for the Foundry IQ knowledge base's MCP tool -- reference this when wiring the connection into an agent's tool list."
+  value       = azapi_resource.foundry_iq_kb_connection.name
+}
+
+output "AZURE_FOUNDRY_DATA_AGENT_CONNECTION_NAME" {
+  description = "Foundry project connection name for the shared Fabric Data Agent's MCP tool."
+  value       = azapi_resource.fabric_data_agent_mcp_connection.name
+}
+
+output "AZURE_FOUNDRY_ONTOLOGY_CONNECTION_NAME" {
+  description = "Foundry project connection name for the Fabric IQ Ontology's MCP tool."
+  value       = azapi_resource.fabric_iq_ontology_mcp_connection.name
 }
 
 output "AZURE_FOUNDRY_PRINCIPAL_ID" {

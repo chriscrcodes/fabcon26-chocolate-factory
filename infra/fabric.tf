@@ -234,6 +234,23 @@ resource "fabric_workspace_role_assignment" "search_contributor" {
   role = "Contributor"
 }
 
+# Lets the Foundry project's own managed identity query the shared
+# Fabric Data Agent and the Fabric IQ Ontology, both over MCP, via
+# `azapi_resource.fabric_data_agent_mcp_connection` and
+# `.fabric_iq_ontology_mcp_connection` in azure.tf -- same
+# ManagedIdentity/RemoteTool connection pattern as the Foundry IQ
+# knowledge base connection, applied to Fabric's own MCP endpoints
+# instead of Azure AI Search's.
+resource "fabric_workspace_role_assignment" "foundry_project_contributor" {
+  workspace_id = local.workspace_id
+
+  principal = {
+    id   = azurerm_cognitive_account_project.chocolate_factory.identity[0].principal_id
+    type = "ServicePrincipal"
+  }
+  role = "Contributor"
+}
+
 # Configures the Search-side plumbing (data source + index + indexer)
 # that indexes Files/kb/ straight out of OneLake -- the Foundry IQ
 # knowledge base itself, on top of this index, has no documented
@@ -545,6 +562,20 @@ resource "null_resource" "deploy_ontology" {
       FABRIC_KQL_DATABASE_NAME    = fabric_kql_database.this.display_name
       FABRIC_LAKEHOUSE_ID         = fabric_lakehouse.dimensions.id
     }
+  }
+}
+
+# Looks up the Ontology item's ID by display name via a live Fabric
+# REST call -- there's no Terraform-native resource/attribute for it
+# since the item itself is created out-of-band by
+# null_resource.deploy_ontology's local-exec script, not a Terraform
+# resource. Feeds the Ontology MCP endpoint URL
+# (azure.tf's azapi_resource.fabric_iq_ontology_mcp_connection).
+data "external" "ontology_item" {
+  depends_on = [null_resource.deploy_ontology]
+  program    = ["uv", "run", "--with", "azure-identity", "--with", "requests", "${path.module}/../fabric/ontology/get_ontology_item_id.py"]
+  query = {
+    workspace_id = local.workspace_id
   }
 }
 
