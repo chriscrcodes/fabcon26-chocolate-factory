@@ -613,3 +613,54 @@ output "FABRIC_SQL_DATABASE_NAME" {
   value       = fabric_sql_database.business.properties.database_name
 }
 
+# ---------------------------------------------------------------------
+# Fabric Data Agent -- one shared NL-to-query agent spanning both
+# engines (Eventhouse for Factory/Quality, Fabric SQL Database for
+# Supply Chain/ERP), per the agent-spine plan's cost/complexity
+# priority: a single data agent (it supports up to 5 mixed sources)
+# rather than one per domain. Schema verified against
+# https://learn.microsoft.com/en-us/rest/api/fabric/articles/item-management/definitions/data-agent-definition
+# (not guessed) -- but that page's `type` enum for a datasource has no
+# literal "sql_database" value (only lakehouse/lakehouse_tables/
+# data_warehouse/kusto/semantic_model/graph/mirrored_database/
+# mirrored_azure_databricks), so `data_warehouse` for the Fabric SQL
+# Database source is a live-verify-and-adjust guess, not a confirmed
+# value -- check the definition-part errors (if any) after apply.
+# ---------------------------------------------------------------------
+
+resource "fabric_data_agent" "business" {
+  depends_on = [null_resource.load_dimension_tables]
+
+  display_name = "chocolate_factory_data_agent"
+  workspace_id = local.workspace_id
+  format       = "Default"
+
+  definition = {
+    "Files/Config/data_agent.json" = {
+      source = "${path.module}/../foundry/agents/data-agent/data_agent.json.tmpl"
+    }
+    "Files/Config/draft/stage_config.json" = {
+      source = "${path.module}/../foundry/agents/data-agent/draft/stage_config.json.tmpl"
+    }
+    "Files/Config/draft/kusto-eventhouse/datasource.json" = {
+      source = "${path.module}/../foundry/agents/data-agent/draft/kusto-eventhouse/datasource.json.tmpl"
+      tokens = {
+        WorkspaceId   = local.workspace_id
+        KqlDatabaseId = fabric_kql_database.this.id
+      }
+    }
+    "Files/Config/draft/lakehouse_tables-business_lakehouse/datasource.json" = {
+      source = "${path.module}/../foundry/agents/data-agent/draft/lakehouse_tables-business_lakehouse/datasource.json.tmpl"
+      tokens = {
+        WorkspaceId = local.workspace_id
+        LakehouseId = fabric_lakehouse.dimensions.id
+      }
+    }
+  }
+}
+
+output "FABRIC_DATA_AGENT_ID" {
+  description = "Shared Fabric Data Agent item ID (Eventhouse + Fabric SQL Database)."
+  value       = fabric_data_agent.business.id
+}
+

@@ -1,0 +1,217 @@
+{
+  "$schema": "1.0.0",
+  "artifactId": "{{ .KqlDatabaseId }}",
+  "workspaceId": "{{ .WorkspaceId }}",
+  "displayName": "Factory Eventhouse",
+  "type": "kusto",
+  "userDescription": "Factory/Quality telemetry: batch, quality_check, line_status, and Gold rollups (gold_defect_rate_by_stage_daily, gold_line_throughput_hourly(), gold_batch_summary(), gold_factory_oee_daily()).",
+  "dataSourceInstructions": "Use for questions about production batches, quality checks, line status/downtime, defect rates, throughput, and OEE.",
+  "elements": [
+    {
+      "id": "ecf82d9d-f071-524e-bbc4-252767ff7eef",
+      "is_selected": true,
+      "display_name": "silver_batch",
+      "type": "kusto.table",
+      "children": [
+        {
+          "id": "563b1b4c-8657-5981-b98c-10502bcbbb7d",
+          "is_selected": true,
+          "display_name": "BatchId",
+          "type": "kusto.column",
+          "data_type": "string"
+        },
+        {
+          "id": "e9482df2-be53-51b1-873c-38a4c4e410ca",
+          "is_selected": true,
+          "display_name": "LineId",
+          "type": "kusto.column",
+          "data_type": "string"
+        },
+        {
+          "id": "8e00f23c-1a6d-5443-85db-97b161e5c6cd",
+          "is_selected": true,
+          "display_name": "RecipeId",
+          "type": "kusto.column",
+          "data_type": "string"
+        },
+        {
+          "id": "66916c1f-3798-51ba-a40a-9c96aaa5b4b9",
+          "is_selected": true,
+          "display_name": "StartTime",
+          "type": "kusto.column",
+          "data_type": "datetime"
+        },
+        {
+          "id": "8937c05d-1034-5c37-8e50-7d7b632e8929",
+          "is_selected": true,
+          "display_name": "EndTime",
+          "type": "kusto.column",
+          "data_type": "datetime"
+        }
+      ]
+    },
+    {
+      "id": "534679d2-4871-52f7-9285-d8c50468b536",
+      "is_selected": true,
+      "display_name": "silver_quality_check",
+      "type": "kusto.table",
+      "children": [
+        {
+          "id": "6b366068-a46f-5f35-9bd0-10b760e2dbe8",
+          "is_selected": true,
+          "display_name": "Timestamp",
+          "type": "kusto.column",
+          "data_type": "datetime"
+        },
+        {
+          "id": "b801debb-c4ef-587e-b0af-f19ed72e013f",
+          "is_selected": true,
+          "display_name": "CheckId",
+          "type": "kusto.column",
+          "data_type": "string"
+        },
+        {
+          "id": "8131fa25-d901-5c1d-8ff3-f25369053755",
+          "is_selected": true,
+          "display_name": "BatchId",
+          "type": "kusto.column",
+          "data_type": "string"
+        },
+        {
+          "id": "8320984b-d32b-5528-86f2-720dc7a0ca83",
+          "is_selected": true,
+          "display_name": "LineId",
+          "type": "kusto.column",
+          "data_type": "string"
+        },
+        {
+          "id": "7167147e-b866-52fe-93b0-93fb14254c05",
+          "is_selected": true,
+          "display_name": "LineName",
+          "type": "kusto.column",
+          "data_type": "string"
+        },
+        {
+          "id": "d111fa53-d0c9-5805-9e91-14c244748071",
+          "is_selected": true,
+          "display_name": "FactoryId",
+          "type": "kusto.column",
+          "data_type": "string"
+        },
+        {
+          "id": "bfb2a1f8-1840-51fb-8852-b3aac0b1d200",
+          "is_selected": true,
+          "display_name": "FactoryCode",
+          "type": "kusto.column",
+          "data_type": "string"
+        },
+        {
+          "id": "24af56b0-63e7-5d12-ad6f-fcb006234aa8",
+          "is_selected": true,
+          "display_name": "StageId",
+          "type": "kusto.column",
+          "data_type": "string"
+        },
+        {
+          "id": "b9318ff9-bf23-5209-a8ef-9bdc0242f86f",
+          "is_selected": true,
+          "display_name": "StageName",
+          "type": "kusto.column",
+          "data_type": "string"
+        },
+        {
+          "id": "7eab6020-582d-5453-89e9-fae6d299d721",
+          "is_selected": true,
+          "display_name": "Phase",
+          "type": "kusto.column",
+          "data_type": "string"
+        },
+        {
+          "id": "1ed4081b-9e12-542a-aa9d-f1505a057cb1",
+          "is_selected": true,
+          "display_name": "DefectRate",
+          "type": "kusto.column",
+          "data_type": "real"
+        },
+        {
+          "id": "7bebeba8-4efc-5acf-8704-a21e18aa571a",
+          "is_selected": true,
+          "display_name": "Result",
+          "type": "kusto.column",
+          "data_type": "string"
+        },
+        {
+          "id": "44b29f84-dd9b-5fc6-884b-d103d8d0e9bb",
+          "is_selected": true,
+          "display_name": "Notes",
+          "type": "kusto.column",
+          "data_type": "string"
+        }
+      ]
+    },
+    {
+      "id": "a92f0091-c031-53e0-8e25-7ef6a128c6e8",
+      "is_selected": true,
+      "display_name": "silver_line_status",
+      "type": "kusto.table",
+      "children": [
+        {
+          "id": "5d64eb52-a0a8-5df9-84ce-7d85ed2ae5be",
+          "is_selected": true,
+          "display_name": "Timestamp",
+          "type": "kusto.column",
+          "data_type": "datetime"
+        },
+        {
+          "id": "b256c0c0-fd9c-527b-8e41-1d6b853d2818",
+          "is_selected": true,
+          "display_name": "EventId",
+          "type": "kusto.column",
+          "data_type": "string"
+        },
+        {
+          "id": "9bcd228c-1454-5eed-94a4-494ac02c9de0",
+          "is_selected": true,
+          "display_name": "LineId",
+          "type": "kusto.column",
+          "data_type": "string"
+        },
+        {
+          "id": "f3af94b9-a908-5ef5-a51c-b331a4267a44",
+          "is_selected": true,
+          "display_name": "LineName",
+          "type": "kusto.column",
+          "data_type": "string"
+        },
+        {
+          "id": "9f461308-ae98-5fb5-9633-61ef1bd64519",
+          "is_selected": true,
+          "display_name": "FactoryId",
+          "type": "kusto.column",
+          "data_type": "string"
+        },
+        {
+          "id": "1832361e-184d-5b41-9274-409ca46a9d78",
+          "is_selected": true,
+          "display_name": "FactoryCode",
+          "type": "kusto.column",
+          "data_type": "string"
+        },
+        {
+          "id": "c228e3ba-f80a-5062-b48f-a80aa234a2d8",
+          "is_selected": true,
+          "display_name": "Status",
+          "type": "kusto.column",
+          "data_type": "string"
+        },
+        {
+          "id": "6ddde5da-93d0-57a8-8bb5-8d44d61111fb",
+          "is_selected": true,
+          "display_name": "Reason",
+          "type": "kusto.column",
+          "data_type": "string"
+        }
+      ]
+    }
+  ]
+}
