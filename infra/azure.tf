@@ -272,6 +272,30 @@ resource "azurerm_cognitive_account_project" "chocolate_factory" {
   tags = var.tags
 }
 
+# gpt-5.4-mini -- cheapest Generally Available model at the time of
+# deployment (gpt-4o/gpt-4o-mini were both in "Deprecating" lifecycle
+# state and rejected live: "ServiceModelDeprecating ... cannot be used
+# for new deployments" -- checked `az cognitiveservices account
+# list-models` for current GA options rather than assuming an older
+# model name still works). Plenty for a demo agent answering grounded
+# factual questions rather than doing complex reasoning. GlobalStandard
+# SKU, minimum capacity (10 = 10K TPM).
+resource "azurerm_cognitive_deployment" "agent_model" {
+  name                 = "gpt-5.4-mini"
+  cognitive_account_id = azurerm_cognitive_account.foundry.id
+
+  model {
+    format  = "OpenAI"
+    name    = "gpt-5.4-mini"
+    version = "2026-03-17"
+  }
+
+  sku {
+    name     = "GlobalStandard"
+    capacity = 10
+  }
+}
+
 output "AZURE_FOUNDRY_ACCOUNT_NAME" {
   description = "Microsoft Foundry (Cognitive Services AIServices) account name."
   value       = azurerm_cognitive_account.foundry.name
@@ -285,6 +309,11 @@ output "AZURE_FOUNDRY_ACCOUNT_ENDPOINT" {
 output "AZURE_FOUNDRY_PROJECT_NAME" {
   description = "Microsoft Foundry project name -- used in the project's own endpoint URL."
   value       = azurerm_cognitive_account_project.chocolate_factory.name
+}
+
+output "AZURE_FOUNDRY_MODEL_DEPLOYMENT_NAME" {
+  description = "Model deployment name to reference when creating an agent."
+  value       = azurerm_cognitive_deployment.agent_model.name
 }
 
 output "AZURE_FOUNDRY_PRINCIPAL_ID" {
