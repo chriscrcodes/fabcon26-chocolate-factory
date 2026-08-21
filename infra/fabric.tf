@@ -614,18 +614,23 @@ output "FABRIC_SQL_DATABASE_NAME" {
 }
 
 # ---------------------------------------------------------------------
-# Fabric Data Agent -- one shared NL-to-query agent spanning both
-# engines (Eventhouse for Factory/Quality, Fabric SQL Database for
-# Supply Chain/ERP), per the agent-spine plan's cost/complexity
-# priority: a single data agent (it supports up to 5 mixed sources)
-# rather than one per domain. Schema verified against
-# https://learn.microsoft.com/en-us/rest/api/fabric/articles/item-management/definitions/data-agent-definition
-# (not guessed) -- but that page's `type` enum for a datasource has no
-# literal "sql_database" value (only lakehouse/lakehouse_tables/
-# data_warehouse/kusto/semantic_model/graph/mirrored_database/
-# mirrored_azure_databricks), so `data_warehouse` for the Fabric SQL
-# Database source is a live-verify-and-adjust guess, not a confirmed
-# value -- check the definition-part errors (if any) after apply.
+# Fabric Data Agent -- an NL-to-query agent grounded in the Eventhouse
+# (Factory/Quality). Schema verified against
+# https://learn.microsoft.com/en-us/rest/api/fabric/articles/item-management/definitions/data-agent-definition.
+# Originally scoped as one shared agent spanning both the Eventhouse and
+# a Lakehouse mirror of the Supply Chain/ERP tables too (avoiding a
+# separate data agent per domain), but the Lakehouse leg never became
+# queryable despite five live-tried configurations -- including an
+# exact reproduction of a config built through the Fabric portal's own
+# "+ Add data source" picker, confirmed live in the portal's own Sources
+# view as connected with no warning, and STILL failing identically both
+# via this agent's MCP endpoint and the portal's own native chat panel
+# ("data sources ... do not contain supplier information"). Concluded
+# this is a current product limitation of Data Agent + Lakehouse Tables
+# for this data shape, not a configuration mistake -- see
+# foundry/agents/README.md for the full sequence tried. Supply
+# Chain/ERP grounding for the Foundry agent comes from the Ontology
+# (already covers all 9 tables with 27 real relationships) instead.
 # ---------------------------------------------------------------------
 
 resource "fabric_data_agent" "business" {
@@ -647,13 +652,6 @@ resource "fabric_data_agent" "business" {
       tokens = {
         WorkspaceId   = local.workspace_id
         KqlDatabaseId = fabric_kql_database.this.id
-      }
-    }
-    "Files/Config/draft/lakehouse_tables-business_lakehouse/datasource.json" = {
-      source = "${path.module}/../foundry/agents/data-agent/draft/lakehouse_tables-business_lakehouse/datasource.json.tmpl"
-      tokens = {
-        WorkspaceId = local.workspace_id
-        LakehouseId = fabric_lakehouse.dimensions.id
       }
     }
   }

@@ -27,10 +27,11 @@ Fabric together:
   Chain/ERP tables (for Ontology binding — see below), *and* the
   `foundry/kb/*.md` knowledge-base docs, a Fabric SQL Database holding
   the authoritative Supply Chain/ERP tables, a Fabric IQ Ontology
-  (preview) bound across the Eventhouse and Lakehouse, a shared Fabric
-  Data Agent grounded in the Eventhouse (working) and the Lakehouse
-  mirror (not yet working — see `foundry/agents/README.md`), a
-  workspace role assignment granting the
+  (preview) bound across the Eventhouse and Lakehouse, a Fabric Data
+  Agent grounded in the Eventhouse — Factory/Quality only; a second
+  Lakehouse-backed source for Supply Chain/ERP was tried and abandoned,
+  see `foundry/agents/README.md` — a workspace role assignment granting
+  the
   Azure AI Search service (`azure.tf`) Contributor so its OneLake
   indexer can read the Lakehouse, and `null_resource`s (`hashicorp/null`
   provider) that deploy the Bronze/Silver/Gold KQL, the dimension

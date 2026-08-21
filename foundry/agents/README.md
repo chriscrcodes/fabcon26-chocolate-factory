@@ -2,9 +2,7 @@
 
 Phase 3 of the FabCon demo: the "agent spine" on top of the already-built
 data spine (Fabric IQ Ontology, Fabric SQL Database, Eventhouse, Foundry
-IQ knowledge base). Per the agent-spine plan's cost/complexity
-priority: one shared Fabric Data Agent (not one per domain) before any
-Foundry Agent Service agent gets built on top.
+IQ knowledge base).
 
 ## What's here
 
@@ -14,45 +12,59 @@ Foundry Agent Service agent gets built on top.
   `datasource.json` per grounded source. Schema verified against
   [Microsoft Learn's Data Agent item definition article](https://learn.microsoft.com/en-us/rest/api/fabric/articles/item-management/definitions/data-agent-definition).
 - [`generate_data_agent_definition.py`](generate_data_agent_definition.py)
-  generates the `elements` tree (which tables/columns are selected) for
-  each datasource — the API doesn't auto-discover a source's schema
-  from just an artifactId; every table/column has to be listed
-  explicitly with `is_selected: true`.
+  generates the `elements` tree (which tables/columns are selected) —
+  the API doesn't auto-discover a source's schema from just an
+  artifactId; every table/column has to be listed explicitly with
+  `is_selected: true`.
 
 ## Status
 
-**Eventhouse source: done, verified live.** Bound to the Eventhouse's
-`silver_batch`, `silver_quality_check`, `silver_line_status` tables via
+**Eventhouse-only, done and verified live.** Bound to the Eventhouse's
+`silver_quality_check` and `silver_line_status` tables via
 `type: "kusto"`. Confirmed answering real questions correctly through
-the Data Agent's own MCP endpoint (see "Testing it yourself" below) —
-e.g. "How many quality checks failed today?" → correct, grounded
-answer.
+the Data Agent's own MCP endpoint and the Fabric portal's own chat
+panel (see "Testing it yourself" below) — e.g. "How many quality
+checks failed today?" → correct, grounded answer.
 
-**Lakehouse source (Supply Chain/ERP mirror): not yet working.** Points
-at the same dimension Lakehouse the Ontology mirrors these 9 tables
-into (`fabric/ontology/deploy_dimension_lakehouse.py`) — not the Fabric
-SQL Database directly, since `type: "data_warehouse"` was tried first
-and live-verified not to function against a genuine `SQLDatabase`-type
-Fabric item (no `sql_database` value exists in the datasource `type`
-enum at all). Four schema variants were tried against the Lakehouse
-mirror instead (flat vs. wrapped `elements`, `lakehouse` vs.
-`lakehouse_tables` as the top-level `type`, Delta vs. SQL-analytics
-column type names) — all deploy without any schema/validation error,
-but none actually became queryable; the agent still describes the
-domain conceptually (from the prose fields) but reports the real
-tables as inaccessible whenever asked a real question. See
-[`generate_data_agent_definition.py`](generate_data_agent_definition.py)'s
-docstring for the exact sequence tried. Root cause unconfirmed —
-possibly a permissions/consent step only visible in the Fabric
-portal's own Data Agent UI, not exposed via REST.
+`silver_batch` is excluded (materialized view, not a plain table —
+showed a permission/deleted warning in the portal even with an
+identical `is_selected: true` config to the two working tables; same
+category of limitation that already blocked OneLake mirroring for it
+elsewhere in this repo).
 
-**Next step if picking this back up**: open the Data Agent
-(`chocolate_factory_data_agent`) in the Fabric portal directly and
-check its Sources tab for the Lakehouse connection — portal UI may
-surface a connection error REST doesn't. If the portal shows it as
-genuinely connected there, the gap is specific to how definitions
-authored via API/Terraform represent a Lakehouse source, not the
-underlying connectivity.
+**Supply Chain/ERP via a second (Lakehouse) source: abandoned, not a
+bug on our end.** The plan was one shared data agent spanning both
+engines rather than one per domain — Fabric SQL Database directly
+(`type: "data_warehouse"`) was ruled out first (doesn't function
+against a genuine `SQLDatabase`-type item; no `sql_database` value
+exists in the `type` enum at all). Switched to the dimension
+Lakehouse's mirror of the same 9 tables instead, and tried five
+configurations live:
+
+1. Flat top-level table list (the shape that works for Kusto)
+2. Wrapped in a `lakehouse_tables` root element
+3. Top-level `type: "lakehouse"` instead of `"lakehouse_tables"`
+   (rejected outright — "Data source type is immutable")
+4. SQL-analytics-endpoint type names (`varchar`/`float`/`int`) instead
+   of Delta type names
+5. An **exact byte-for-byte reproduction** of a config built by
+   removing and re-adding the source through the Fabric portal's own
+   "+ Add data source" picker — confirmed in the portal's own Sources
+   view as connected, no warning, all 21 tables visible under
+   `Schemas > dbo > Tables`
+
+Every one of the five failed identically: the agent reports "the
+available data sources do not contain supplier information" — via this
+agent's MCP endpoint **and** the portal's own native chat panel, even
+for configuration (5), which the portal itself had just generated and
+displayed as healthy. That last result is what rules out a
+configuration mistake on our end — if the portal's own generated
+config fails in the portal's own chat, the gap is in Data Agent +
+Lakehouse Tables query execution for this data shape, not in anything
+authored here. Supply Chain/ERP grounding for the Foundry agent
+comes from the **Fabric IQ Ontology** instead (already covers all 9
+tables with 27 real relationships, verified working independently of
+this issue).
 
 ## Testing it yourself
 
