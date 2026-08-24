@@ -1,0 +1,12 @@
+agent-framework-foundry
+agent-framework-foundry-hosting>=1.0.0a260630
+
+# Direct A2A calls to the two specialist agents (message/send + tasks/get
+# polling, see main.py) -- plain HTTP, not through the buggy a2a_preview
+# Foundry tool (see ../../README.md and the two plan files it links for
+# why this Coordinator calls specialists directly instead).
+httpx
+azure-identity
+
+# debugpy enables local debugging of this agent with the Foundry Toolkit VS Code extension.
+debugpy

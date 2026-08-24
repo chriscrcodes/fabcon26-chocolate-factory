@@ -17,9 +17,23 @@ IQ knowledge base).
   artifactId; every table/column has to be listed explicitly with
   `is_selected: true`.
 - [`deploy_foundry_agent.py`](deploy_foundry_agent.py) creates/updates
-  the actual Foundry Agent Service agent (`chocolate-factory-agent`)
-  that ties the whole agent spine together — see "The Foundry agent"
-  below.
+  the Foundry Agent Service agent(s) that tie the agent spine together
+  — see "The Foundry agent(s)" below. Branches on `AGENT_PROFILE` into
+  either the single generalist agent (`chocolate-factory-agent`,
+  default) or the two specialist agents behind the split architecture
+  (see "Specialist/Coordinator split" below).
+- [`deploy_a2a.py`](deploy_a2a.py) enables incoming Agent-to-Agent
+  (A2A) on the two specialist agents only, used when the split
+  architecture is active — see "Specialist/Coordinator split" and "A2A
+  is asynchronous" below.
+- [`coordinator/`](coordinator) — the Hosted (code-defined) Foundry
+  agent that routes between the two specialists over direct A2A calls
+  when the split architecture is active. A tracked `azd ai agent`
+  project (scaffolded via the `microsoft-foundry` Claude Code skill),
+  deployed separately from this repo's Terraform (`azd provision`/`azd
+  deploy` against `coordinator/`, not `terraform apply`) — see
+  "Specialist/Coordinator split" below for why the two tools are kept
+  deliberately separate.
 
 ## The Foundry agent
 
@@ -96,6 +110,102 @@ is different from the one Fabric MCP clients use directly
 `UserEntraToken` connections handle the Fabric-side token exchange
 internally, using whichever identity called the agent in the first
 place.
+
+## Specialist/Coordinator split (`enable_agent_split`)
+
+**Authored, not yet applied against live resources** (this is a
+code/config-authoring pass; a separate follow-up task handles live
+deployment and verification). Behind `infra/azure.tf`'s
+`enable_agent_split` variable (default `false`):
+
+- `enable_agent_split = false` (default): unchanged from everything
+  above -- `deploy_foundry_agent.py` deploys the single generalist
+  `chocolate-factory-agent`, wired to all three tools.
+- `enable_agent_split = true`: `deploy_foundry_agent.py` instead
+  deploys two narrower Prompt agents (same script, `AGENT_PROFILE`
+  env var):
+  - `chocolate-factory-specialist-factory-quality` -- tools
+    `knowledge_base` + `fabric_data_agent` only. Domain: production
+    lines, batches, sensor telemetry, quality checks, line
+    status/downtime (`doc/cacao-data-model.md` §4 "Factory / Quality").
+  - `chocolate-factory-specialist-supply-chain-erp` -- tools
+    `knowledge_base` + `fabric_iq_ontology` only. Domain: suppliers,
+    materials, inventory, shipments, customers, orders, invoices
+    (`doc/cacao-data-model.md` §4 "Supply Chain" / "ERP / Orders").
+
+  `deploy_a2a.py` then enables incoming A2A on both specialists (agent
+  card + skills describing each domain concretely, for the
+  Coordinator's routing and for a human reading the A2A trace).
+
+  The public-facing `chocolate-factory-agent` name is taken over by a
+  new **Hosted** (code-defined) Foundry agent, the Coordinator
+  (`coordinator/`), which holds no domain tools itself: it routes each
+  question to the appropriate specialist(s) over direct A2A HTTP calls
+  and synthesizes the final answer. It's Hosted rather than Prompt-kind
+  specifically to avoid Foundry's built-in `a2a_preview` tool, which
+  two prior spikes found reproducibly broken in both wirings (toolbox
+  and direct-attached) -- see
+  `~/.claude/plans/now-let-s-deploy-the-reactive-toucan.md` for that
+  investigation's full findings (RBAC grants, JSON-RPC shape, and
+  exactly where the `a2a_preview` tool itself fails) and
+  `~/.claude/plans/please-analyze-current-project-majestic-meteor.md`
+  for why a Hosted Coordinator calling out with plain HTTP was tried
+  next. The raw A2A protocol against a target agent's endpoint, by
+  contrast, is proven live and reused verbatim in `coordinator/src/coordinator/main.py`.
+
+  **Why the Coordinator is deployed via `azd`, not this repo's
+  Terraform**: `azd ai agent` (the Foundry hosted-agent tooling) and
+  this repo's Terraform are two deliberately separate provisioning
+  surfaces -- Terraform doesn't model hosted-agent containers, and
+  `azd`'s own state (`.azure/`, gitignored) isn't something Terraform
+  reads or writes. Concretely, this means the Coordinator's own managed
+  identity (needed for the RBAC grant below) isn't a resource this
+  Terraform state can reference -- see
+  `azurerm_role_assignment.coordinator_foundry_agent_consumer` in
+  `infra/azure.tf` for the resulting `count`-gated, TODO-commented
+  placeholder (gated on both `enable_agent_split` and a
+  `coordinator_principal_id` variable that starts empty and has to be
+  hand-filled, or looked up, once the Coordinator is actually deployed).
+
+### A2A is asynchronous -- new finding, not previously documented anywhere in this repo
+
+`message/send` against an agent's `/endpoint/protocols/a2a` URL returns
+**immediately** with `result.status.state: "submitted"` and a task
+`id` -- **not** the answer. The answer only appears once polling
+`tasks/get` reports `status.state == "completed"`, under
+`result.artifacts[].parts[].text`:
+
+```json
+{"jsonrpc":"2.0","id":"...","method":"tasks/get","params":{"id":"<task-id>"}}
+```
+
+Both `message.kind: "message"` and `parts[].kind: "text"` in the
+`message/send` body are required discriminators that the A2A docs' own
+examples omit -- without them the target rejects the call before ever
+reaching agent resolution (this part was already found by the prior
+spike; the asynchronous `submitted` → poll → `completed` shape above is
+the new part). See `coordinator/src/coordinator/main.py`'s
+`_call_specialist_a2a` for the reference implementation (`httpx` +
+`azure-identity`'s `DefaultAzureCredential`, scope
+`https://ai.azure.com/.default`), and `deploy_a2a.py`'s docstring for
+the incoming-A2A PATCH shape this depends on.
+
+### Routing design
+
+The Coordinator's routing (which specialist(s) a question goes to) is a
+**deterministic keyword heuristic**, not a separate LLM classification
+call and not the hosted model's own tool-selection judgment -- see
+`coordinator/src/coordinator/main.py`'s module docstring for the full
+reasoning. In short: the two domains are lexically distinct enough for
+a keyword match to be good enough for a demo router, and keeping the
+decision in plain Python code keeps it deterministic and visible in the
+trace. For the cross-domain case (the plan's acceptance-test question:
+*"Which factories are receiving shipments, and how many quality checks
+failed today at those same factories?"*), Supply Chain/ERP is called
+first, its answer is scanned for a known factory code/city (simple
+substring match, no second LLM call), and if found that's folded into
+the question sent to the Factory/Quality specialist as plain context
+text.
 
 ## Data Agent (Fabric item) status
 

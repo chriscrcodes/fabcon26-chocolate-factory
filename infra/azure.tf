@@ -79,6 +79,41 @@ variable "tags" {
   }
 }
 
+variable "enable_agent_split" {
+  description = <<-EOT
+    When false (default), deploy_foundry_agent.py deploys the single
+    generalist agent (chocolate-factory-agent) as it always has -- an
+    untouched `terraform apply` behaves exactly as before this variable
+    existed. When true, it instead deploys the two Prompt-kind
+    specialist agents (Factory/Quality, Supply Chain/ERP) plus the
+    incoming-A2A setup, and expects the Hosted Coordinator
+    (foundry/agents/coordinator/, deployed separately via `azd`, not
+    this Terraform state) to take over the chocolate-factory-agent name
+    as the public-facing agent. See foundry/agents/README.md and
+    ~/.claude/plans/please-analyze-current-project-majestic-meteor.md
+    for the fuller design.
+  EOT
+  type        = bool
+  default     = false
+}
+
+variable "coordinator_principal_id" {
+  description = <<-EOT
+    Object ID of the Hosted Coordinator's own managed identity
+    (foundry/agents/coordinator/, provisioned separately by `azd
+    provision` against its own azd project/environment -- deliberately
+    a different Terraform/tooling state from this one). Left empty by
+    default because that identity doesn't exist until the Coordinator
+    has actually been deployed via azd; only meaningful together with
+    enable_agent_split = true. See
+    azurerm_role_assignment.coordinator_foundry_agent_consumer's
+    comment for why this can't be resolved as a resource reference
+    here.
+  EOT
+  type        = string
+  default     = ""
+}
+
 data "azurerm_resource_group" "this" {
   name = var.resource_group_name
 }
@@ -496,8 +531,25 @@ output "AZURE_FOUNDRY_PRINCIPAL_ID" {
   value       = azurerm_cognitive_account.foundry.identity[0].principal_id
 }
 
-# Creates/updates the actual Foundry Agent Service agent
-# (chocolate-factory-agent) wired to all 3 tools above -- like the
+# Foundry Agent Service agent profiles to deploy via
+# deploy_foundry_agent.py, keyed by AGENT_PROFILE -- exactly the shape
+# the prior spike's Phase 2 speced
+# (~/.claude/plans/now-let-s-deploy-the-reactive-toucan.md) and the
+# follow-up plan's Phase 2 confirmed
+# (~/.claude/plans/please-analyze-current-project-majestic-meteor.md).
+# `enable_agent_split = false` (default) keeps the single map entry
+# this file always had -- an untouched `terraform apply` deploys
+# exactly the same generalist agent as before this variable existed.
+locals {
+  agent_deploy_profiles = var.enable_agent_split ? {
+    specialist_factory_quality  = { agent_profile = "specialist_factory_quality" }
+    specialist_supply_chain_erp = { agent_profile = "specialist_supply_chain_erp" }
+    } : {
+    generalist = { agent_profile = "generalist" }
+  }
+}
+
+# Creates/updates the Foundry Agent Service agent(s) above -- like the
 # Fabric IQ Ontology and search indexer deployments, this is a direct
 # REST call via a script, not a Terraform-native resource: the
 # `agents` API isn't modeled by any provider (see
@@ -510,6 +562,8 @@ output "AZURE_FOUNDRY_PRINCIPAL_ID" {
 # `AIServices/agents/read`, not a permissions error anyone would
 # immediately connect to Terraform.
 resource "null_resource" "deploy_foundry_agent" {
+  for_each = local.agent_deploy_profiles
+
   depends_on = [
     azurerm_role_assignment.deployer_foundry_user,
     azurerm_cognitive_deployment.agent_model,
@@ -519,13 +573,15 @@ resource "null_resource" "deploy_foundry_agent" {
   ]
 
   triggers = {
-    files_hash = filesha256("${path.module}/../foundry/agents/deploy_foundry_agent.py")
+    files_hash    = filesha256("${path.module}/../foundry/agents/deploy_foundry_agent.py")
+    agent_profile = each.value.agent_profile
   }
 
   provisioner "local-exec" {
     command = "uv run --with azure-identity --with requests ${path.module}/../foundry/agents/deploy_foundry_agent.py"
 
     environment = {
+      AGENT_PROFILE                       = each.value.agent_profile
       AZURE_FOUNDRY_ACCOUNT_NAME          = azurerm_cognitive_account.foundry.name
       AZURE_FOUNDRY_PROJECT_NAME          = azurerm_cognitive_account_project.chocolate_factory.name
       AZURE_FOUNDRY_MODEL_DEPLOYMENT_NAME = azurerm_cognitive_deployment.agent_model.name
@@ -535,6 +591,60 @@ resource "null_resource" "deploy_foundry_agent" {
       FABRIC_ONTOLOGY_ITEM_ID             = data.external.ontology_item.result.id
     }
   }
+}
+
+# Enables incoming A2A on the two specialist agents (foundry/agents/deploy_a2a.py)
+# -- only meaningful once the specialists exist, so this depends on the
+# for_each deploy above rather than any single agent, and is itself
+# gated so it's a no-op when the split is off.
+resource "null_resource" "deploy_a2a_setup" {
+  count = var.enable_agent_split ? 1 : 0
+
+  depends_on = [null_resource.deploy_foundry_agent]
+
+  triggers = {
+    files_hash = filesha256("${path.module}/../foundry/agents/deploy_a2a.py")
+  }
+
+  provisioner "local-exec" {
+    command = "uv run --with azure-identity --with requests ${path.module}/../foundry/agents/deploy_a2a.py"
+
+    environment = {
+      AZURE_FOUNDRY_ACCOUNT_NAME = azurerm_cognitive_account.foundry.name
+      AZURE_FOUNDRY_PROJECT_NAME = azurerm_cognitive_account_project.chocolate_factory.name
+    }
+  }
+}
+
+# The Hosted Coordinator's own instance identity (foundry/agents/coordinator/)
+# needs "Foundry Agent Consumer" on the project to call the two
+# specialists' A2A endpoints -- the second of the two grants the prior
+# spike found necessary (see
+# ~/.claude/plans/now-let-s-deploy-the-reactive-toucan.md's "What got
+# fixed/confirmed" section: one grant on the project's own identity,
+# already covered by azurerm_role_assignment.deployer_foundry_user's
+# sibling concerns, and a second on the *calling* agent's own instance
+# identity). That identity is provisioned by `azd provision` against
+# the Coordinator's own azd project/environment
+# (foundry/agents/coordinator/), a deliberately separate
+# Terraform/tooling state from this one -- there is no
+# azurerm_/azapi_ resource in *this* state that models it, so its
+# principal_id genuinely can't be a resource reference here (inventing
+# one, e.g. pointing at the deploying user's or the project's own
+# identity, would silently grant the wrong principal rather than fail
+# loudly). TODO once the Coordinator is actually deployed via azd:
+# resolve its managed identity's object ID (`azd env get-values` /
+# `az ad sp show` against the deployed container app's identity) and
+# pass it in as `-var coordinator_principal_id=<id>`, or replace this
+# with a `data` lookup if/when the identity becomes discoverable by a
+# stable name from this state. Until then this resource is a deliberate
+# no-op (count = 0) even with enable_agent_split = true.
+resource "azurerm_role_assignment" "coordinator_foundry_agent_consumer" {
+  count = var.enable_agent_split && var.coordinator_principal_id != "" ? 1 : 0
+
+  scope                = azurerm_cognitive_account_project.chocolate_factory.id
+  role_definition_name = "Foundry Agent Consumer"
+  principal_id         = var.coordinator_principal_id
 }
 
 output "AZURE_FOUNDRY_AGENT_NAME" {
