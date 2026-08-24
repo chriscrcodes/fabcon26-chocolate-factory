@@ -296,12 +296,18 @@ resource "azurerm_cognitive_account_project" "chocolate_factory" {
 # and its dataActions are scoped to OpenAI/SpeechServices/
 # ContentSafety/MaaS only, no `AIServices/agents/*` action at all. Of
 # the built-in roles with a `Microsoft.CognitiveServices/*` dataActions
-# wildcard, "Cognitive Services User" is the least-privileged one that
-# actually covers agent operations -- "Azure AI Developer" stayed a
-# 403 for over 10 minutes, ruling out propagation delay as the cause.
-resource "azurerm_role_assignment" "deployer_cognitive_services_user" {
+# wildcard, "Cognitive Services User" was the first one confirmed to
+# work live -- "Azure AI Developer" stayed a 403 for over 10 minutes,
+# ruling out propagation delay as the cause. Later switched to "Foundry
+# User" instead: same `Microsoft.CognitiveServices/*` dataActions
+# (confirmed identical via `az role definition list`), but it's
+# Microsoft's current, non-deprecated name for this exact role (the
+# Foundry RBAC roles were renamed; "Foundry User" was formerly "Azure
+# AI User") -- keeping both around was redundant, not defense in depth,
+# since they grant the identical wildcard.
+resource "azurerm_role_assignment" "deployer_foundry_user" {
   scope                = azurerm_cognitive_account_project.chocolate_factory.id
-  role_definition_name = "Cognitive Services User"
+  role_definition_name = "Foundry User"
   principal_id         = data.azurerm_client_config.current.object_id
 }
 
@@ -497,15 +503,15 @@ output "AZURE_FOUNDRY_PRINCIPAL_ID" {
 # `agents` API isn't modeled by any provider (see
 # foundry/agents/deploy_foundry_agent.py's docstring for the full
 # tool/connection/auth story). Needs the deploying identity to have
-# already been granted "Cognitive Services User" on the project
-# (azurerm_role_assignment.deployer_cognitive_services_user) -- that's
+# already been granted "Foundry User" on the project
+# (azurerm_role_assignment.deployer_foundry_user) -- that's
 # a separate authorization surface from being Owner/Contributor on the
 # resource group, and its absence fails with a 403 on
 # `AIServices/agents/read`, not a permissions error anyone would
 # immediately connect to Terraform.
 resource "null_resource" "deploy_foundry_agent" {
   depends_on = [
-    azurerm_role_assignment.deployer_cognitive_services_user,
+    azurerm_role_assignment.deployer_foundry_user,
     azurerm_cognitive_deployment.agent_model,
     azapi_resource.foundry_iq_kb_connection,
     azapi_resource.fabric_data_agent_mcp_connection,
