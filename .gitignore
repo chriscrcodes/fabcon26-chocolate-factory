@@ -24,3 +24,6 @@ apm_modules/
 
 # Personal Claude Code config/skills -- not part of this repo's history
 .claude/
+.mcp.json
+apm.yml
+apm.lock.yaml
