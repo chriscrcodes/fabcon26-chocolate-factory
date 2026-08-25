@@ -156,7 +156,24 @@ provisions a real Azure-provisioned `Microsoft.Fabric/capacities`
 resource via `azapi` (default SKU **F2**, configurable via
 `fabric_capacity_sku`) rather than assuming one already exists or
 falling back to a trial workspace — there's no supported Terraform path
-for the latter.
+for the latter. Independently, a trial capacity wouldn't work for this
+demo anyway: Microsoft's own trial-capacity docs list "AI Experiences
+such as Data agent" as unsupported on a trial, and `fabric_data_agent.business`
+is one of this demo's three core Foundry agent tools.
+
+### Nightly auto-pause
+
+Since a paid capacity is a flat per-minute charge while `Active`
+regardless of use, `fabric.tf` also provisions an Azure Automation
+Account + PowerShell runbook (`fabric_capacity_auto_pause_enabled`,
+default `true`) that suspends the capacity every night at
+`fabric_capacity_auto_pause_time_utc` (default `20:00` UTC) — so
+forgetting to pause it after a session doesn't mean paying for it
+overnight or over a weekend. Resume is deliberately manual (demo/
+rehearsal timing is too irregular for a fixed auto-resume schedule to
+help): run `fabric/manage_capacity.py resume` before a session, and
+either let the nightly schedule pause it again afterward or run
+`fabric/manage_capacity.py pause` yourself when done for the day.
 
 `fabric.tf` then creates a dedicated workspace on that capacity, and
 `enable_workspace_identity = true` sets `identity = { type =

@@ -112,6 +112,133 @@ resource "time_sleep" "capacity_ready" {
   create_duration = "60s"
 }
 
+# ---------------------------------------------------------------------
+# Nightly auto-pause -- suspends the Fabric capacity on a schedule so
+# leaving it running overnight/over a weekend (its single biggest cost
+# risk, since it's a flat per-minute charge while Active regardless of
+# whether anything is actually using it) doesn't depend on remembering
+# to do it manually. Resume stays a manual step
+# (fabric/manage_capacity.py resume) since demo/rehearsal timing is
+# irregular -- auto-resuming on a fixed schedule would either resume
+# too early (paying for idle time before a session) or too late
+# (blocking on a cold capacity right when it's needed).
+#
+# An Azure Automation Account + PowerShell runbook, not a Python one:
+# Automation's PowerShell runtime has the Az module preinstalled and
+# authenticates via the account's own managed identity with a single
+# `Connect-AzAccount -Identity`; a Python runbook needs its own package
+# management step (azurerm_automation_python3_package) for
+# azure-identity/requests, more moving parts for the same result.
+# Automation Accounts include 500 free minutes/month on every tier --
+# one ~5-second suspend call per night costs nothing.
+#
+# Schedule runs in UTC, not the demo's local timezone -- Terraform's
+# date functions don't do IANA timezone conversion, and hand-rolling a
+# fixed UTC-offset guess would silently drift wrong across DST. Fixed
+# UTC time is honest about that limitation rather than pretending
+# precision it doesn't have; being off by an hour or two on when
+# "evening" starts doesn't matter for what this is protecting against.
+# ---------------------------------------------------------------------
+
+variable "fabric_capacity_auto_pause_enabled" {
+  description = "Provision an Azure Automation runbook that suspends the Fabric capacity nightly, to avoid paying for idle compute between demo/rehearsal sessions."
+  type        = bool
+  default     = true
+}
+
+variable "fabric_capacity_auto_pause_time_utc" {
+  description = "UTC time (HH:mm, 24h) the nightly auto-pause runbook fires."
+  type        = string
+  default     = "20:00"
+}
+
+resource "azurerm_automation_account" "fabric_capacity" {
+  count = var.fabric_capacity_auto_pause_enabled ? 1 : 0
+
+  name                = "aa-${var.name_prefix}-${local.suffix}"
+  resource_group_name = data.azurerm_resource_group.this.name
+  location            = var.location
+  sku_name            = "Basic"
+
+  identity {
+    type = "SystemAssigned"
+  }
+
+  tags = var.tags
+}
+
+# Scoped to just this one capacity, not the resource group -- least
+# privilege for an identity whose only job is calling one action on
+# one resource. "Contributor" is broader than strictly needed (Azure
+# has no built-in role scoped to just the suspend/resume actions), but
+# scoping it to a single resource keeps the blast radius small.
+resource "azurerm_role_assignment" "fabric_capacity_auto_pause_contributor" {
+  count = var.fabric_capacity_auto_pause_enabled ? 1 : 0
+
+  scope                = azapi_resource.fabric_capacity.id
+  role_definition_name = "Contributor"
+  principal_id         = azurerm_automation_account.fabric_capacity[0].identity[0].principal_id
+}
+
+resource "azurerm_automation_variable_string" "fabric_capacity_id" {
+  count = var.fabric_capacity_auto_pause_enabled ? 1 : 0
+
+  name                    = "FabricCapacityId"
+  resource_group_name     = data.azurerm_resource_group.this.name
+  automation_account_name = azurerm_automation_account.fabric_capacity[0].name
+  value                   = azapi_resource.fabric_capacity.id
+}
+
+resource "azurerm_automation_runbook" "pause_fabric_capacity" {
+  count = var.fabric_capacity_auto_pause_enabled ? 1 : 0
+
+  name                    = "PauseFabricCapacity"
+  resource_group_name     = data.azurerm_resource_group.this.name
+  location                = var.location
+  automation_account_name = azurerm_automation_account.fabric_capacity[0].name
+  runbook_type            = "PowerShell"
+  log_progress            = true
+  log_verbose             = true
+
+  content = <<-EOT
+    Connect-AzAccount -Identity | Out-Null
+    $capacityId = Get-AutomationVariable -Name 'FabricCapacityId'
+    Write-Output "Suspending $capacityId"
+    Invoke-AzRestMethod -Path "$($capacityId)/suspend?api-version=2023-11-01" -Method POST
+  EOT
+
+  tags = var.tags
+}
+
+resource "azurerm_automation_schedule" "nightly_pause" {
+  count = var.fabric_capacity_auto_pause_enabled ? 1 : 0
+
+  name                    = "nightly-fabric-capacity-pause"
+  resource_group_name     = data.azurerm_resource_group.this.name
+  automation_account_name = azurerm_automation_account.fabric_capacity[0].name
+  frequency               = "Day"
+  interval                = 1
+  timezone                = "Etc/UTC" # Azure normalizes "UTC" to this internally -- matching it avoids a perpetual diff.
+  # Anchored to "tomorrow" at apply time so it's always in the future
+  # (Azure rejects a past start_time); ignore_changes freezes it after
+  # first creation so re-applying doesn't perpetually drift/recreate
+  # this on every plan just because timestamp() advances.
+  start_time = "${formatdate("YYYY-MM-DD", timeadd(timestamp(), "24h"))}T${var.fabric_capacity_auto_pause_time_utc}:00Z"
+
+  lifecycle {
+    ignore_changes = [start_time]
+  }
+}
+
+resource "azurerm_automation_job_schedule" "nightly_pause" {
+  count = var.fabric_capacity_auto_pause_enabled ? 1 : 0
+
+  resource_group_name     = data.azurerm_resource_group.this.name
+  automation_account_name = azurerm_automation_account.fabric_capacity[0].name
+  schedule_name           = azurerm_automation_schedule.nightly_pause[0].name
+  runbook_name            = azurerm_automation_runbook.pause_fabric_capacity[0].name
+}
+
 # Looked up here by display_name since that's the value we control
 # directly, rather than guessing at how the Fabric-side capacity ID maps
 # to the ARM resource ID.
