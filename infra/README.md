@@ -92,6 +92,12 @@ terraform init
 terraform apply
 ```
 
+`subscription_id` is mandatory (pins the deployment explicitly rather
+than relying on whatever's active in the deployer's `az` CLI context —
+a real risk when working across multiple subscriptions/resource groups
+in the same session). `resource_group_name` must already exist unless
+`create_resource_group = true`, in which case Terraform creates it.
+
 Also requires [`uv`](https://docs.astral.sh/uv/) on the machine running
 `terraform apply` — `null_resource.load_kql`'s `local-exec` provisioner
 shells out to `uv run --with azure-kusto-data --with azure-identity
@@ -147,6 +153,32 @@ missing config here:
   identities, since an unauthorized real user hits the same wall a
   service principal does.
 
+Confirmed live by actually redeploying into a second resource group
+(`rg-fabcon-demo`, same subscription) — three more things Terraform
+alone doesn't cover, found this way rather than assumed:
+
+- **Fabric workspace and connection display names are unique
+  tenant-wide, not per-workspace or per-resource-group.** The first
+  redeploy attempt failed with `WorkspaceNameAlreadyExists` (the
+  workspace's `new_workspace_display_name`) and then
+  `DuplicateConnectionName` (`fabric_connection.event_hub`'s
+  `display_name`) — both fixed by suffixing with `local.suffix`, the
+  same deterministic per-RG suffix already used for ARM resource names
+  elsewhere in this file. If you see either error, check that whatever
+  supplied the colliding name is unique across the whole tenant, not
+  just within this deployment.
+- **The Fabric Data Agent must be published before it can be
+  queried**, and nothing in this repo automated that until now
+  (`null_resource.publish_data_agent`, `foundry/agents/publish_data_agent.py`)
+  — it had only ever been run by hand against the original deployment,
+  so a fresh redeploy 404'd ("while enumerating tools") until this was
+  added.
+- **OneLake shortcut creation can 400 for a short window right after
+  `04_onelake_mirroring.kql` runs** — the KQL command accepting a
+  table's mirroring policy doesn't mean OneLake's own view of that
+  table is queryable yet. `fabric/ontology/deploy_onelake_shortcuts.py`
+  now retries with backoff instead of failing on the first attempt.
+
 ### Capacity and trial-tenant limitation
 
 The `microsoft/fabric` provider's own docs list a **known limitation**:
@@ -174,6 +206,16 @@ rehearsal timing is too irregular for a fixed auto-resume schedule to
 help): run `fabric/manage_capacity.py resume` before a session, and
 either let the nightly schedule pause it again afterward or run
 `fabric/manage_capacity.py pause` yourself when done for the day.
+
+**Always run `fabric/manage_capacity.py resume` before `terraform
+plan`/`apply` if the capacity might be paused.** Confirmed live: while
+paused, the `fabric` provider can't read the workspace's items at all,
+and `terraform plan` responds by showing the already-existing
+Eventhouse/KQL database/Lakehouse/SQL database as "will be created" —
+`data.fabric_capacity`'s own postcondition fails loudly before that
+plan can be generated specifically to catch this, but the underlying
+risk (destroying and recreating the whole Fabric data estate) is real
+if that check is ever bypassed.
 
 `fabric.tf` then creates a dedicated workspace on that capacity, and
 `enable_workspace_identity = true` sets `identity = { type =

@@ -32,11 +32,22 @@ infra.
 """
 
 import os
+import time
 
 import requests
 from azure.identity import AzureCliCredential
 
 API_BASE = "https://api.fabric.microsoft.com/v1"
+
+# Confirmed live on a fresh deployment: creating a shortcut against a
+# just-mirrored table can 400 for a short window right after
+# 04_onelake_mirroring.kql runs -- the KQL command accepting the
+# mirroring policy doesn't mean OneLake's own view of that table is
+# immediately queryable yet. Retrying a few times with backoff clears
+# it; same class of control-plane-vs-data-plane visibility lag as
+# infra/fabric.tf's time_sleep.capacity_ready.
+RETRY_ATTEMPTS = 6
+RETRY_DELAY_SECONDS = 15
 
 # Eventhouse tables to expose via shortcut -- must already have OneLake
 # availability enabled (fabric/eventhouse/04_onelake_mirroring.kql).
@@ -63,25 +74,31 @@ def main() -> None:
     session.headers["Authorization"] = f"Bearer {token}"
 
     for table in MIRRORED_TABLES:
-        resp = session.post(
-            f"{API_BASE}/workspaces/{workspace_id}/items/{lakehouse_id}/shortcuts",
-            json={
-                "path": "Tables",
-                "name": table,
-                "target": {
-                    "oneLake": {
-                        "workspaceId": workspace_id,
-                        "itemId": kql_database_item_id,
-                        "path": f"Tables/{table}",
-                    }
+        for attempt in range(1, RETRY_ATTEMPTS + 1):
+            resp = session.post(
+                f"{API_BASE}/workspaces/{workspace_id}/items/{lakehouse_id}/shortcuts",
+                json={
+                    "path": "Tables",
+                    "name": table,
+                    "target": {
+                        "oneLake": {
+                            "workspaceId": workspace_id,
+                            "itemId": kql_database_item_id,
+                            "path": f"Tables/{table}",
+                        }
+                    },
                 },
-            },
-        )
-        if resp.status_code == 409:
-            print(f"shortcut {table} already exists, skipping")
-            continue
-        resp.raise_for_status()
-        print(f"created shortcut {table}")
+            )
+            if resp.status_code == 409:
+                print(f"shortcut {table} already exists, skipping")
+                break
+            if resp.status_code == 400 and attempt < RETRY_ATTEMPTS:
+                print(f"shortcut {table} got 400 (attempt {attempt}/{RETRY_ATTEMPTS}), retrying: {resp.text}")
+                time.sleep(RETRY_DELAY_SECONDS)
+                continue
+            resp.raise_for_status()
+            print(f"created shortcut {table}")
+            break
 
 
 if __name__ == "__main__":

@@ -41,6 +41,8 @@ from pathlib import Path
 import requests
 from azure.identity import AzureCliCredential
 from azure.storage.filedatalake import DataLakeServiceClient
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 HERE = Path(__file__).parent
 TABLES_DIR = HERE / "tables"
@@ -110,6 +112,13 @@ def main() -> None:
     file_system_client = service_client.get_file_system_client(file_system=workspace_id)
 
     session = requests.Session()
+    # The load-table polling loop below can run for minutes on a large
+    # table; confirmed live that the connection gets dropped mid-poll
+    # ("RemoteDisconnected") often enough on a fresh deploy to fail the
+    # whole apply without this -- retries transient connection/5xx
+    # errors with backoff instead of surfacing them as a hard failure.
+    retry = Retry(total=5, backoff_factor=2, status_forcelist=[500, 502, 503, 504], allowed_methods=["GET", "POST"])
+    session.mount("https://", HTTPAdapter(max_retries=retry))
     token = credential.get_token("https://api.fabric.microsoft.com/.default").token
     session.headers["Authorization"] = f"Bearer {token}"
 

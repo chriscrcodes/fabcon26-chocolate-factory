@@ -1,7 +1,18 @@
 # --- Azure / Event Hub ---
 
+# Mandatory -- pins the deployment to a specific subscription rather
+# than whatever happens to be active in the deployer's `az` CLI
+# context. Get with: az account show --query id -o tsv
+subscription_id = "<your-subscription-id>"
+
 resource_group_name = "<your-rg>"
-name_prefix          = "cacao"
+
+# false (default): resource_group_name must already exist, e.g.
+#   az group create -n <your-rg> -l westeurope
+# true: Terraform creates resource_group_name itself in var.location.
+# create_resource_group = false
+
+name_prefix = "cacao"
 
 # Defaults to "westeurope" if omitted. Fabric IQ (the Ontology's
 # underlying workload) isn't available in regions where Power BI is

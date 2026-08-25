@@ -30,6 +30,8 @@ from pathlib import Path
 
 import requests
 from azure.identity import AzureCliCredential
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 HERE = Path(__file__).parent
 DEFINITION_DIR = HERE / "fabric_iq"
@@ -93,6 +95,11 @@ def main() -> None:
     }
 
     session = requests.Session()
+    # Confirmed live: long-running Fabric API calls from this machine's
+    # network intermittently drop the connection ("RemoteDisconnected")
+    # -- same class of issue fixed in deploy_dimension_lakehouse.py.
+    retry = Retry(total=5, backoff_factor=2, status_forcelist=[500, 502, 503, 504], allowed_methods=["GET", "POST"])
+    session.mount("https://", HTTPAdapter(max_retries=retry))
     session.headers["Authorization"] = f"Bearer {get_token()}"
 
     parts = build_definition_parts(tokens)

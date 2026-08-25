@@ -81,7 +81,7 @@ locals {
 resource "azapi_resource" "fabric_capacity" {
   type      = "Microsoft.Fabric/capacities@2023-11-01"
   name      = local.fabric_capacity_name
-  parent_id = data.azurerm_resource_group.this.id
+  parent_id = local.resource_group_id
   location  = var.location
 
   body = {
@@ -156,7 +156,7 @@ resource "azurerm_automation_account" "fabric_capacity" {
   count = var.fabric_capacity_auto_pause_enabled ? 1 : 0
 
   name                = "aa-${var.name_prefix}-${local.suffix}"
-  resource_group_name = data.azurerm_resource_group.this.name
+  resource_group_name = local.resource_group_name
   location            = var.location
   sku_name            = "Basic"
 
@@ -184,7 +184,7 @@ resource "azurerm_automation_variable_string" "fabric_capacity_id" {
   count = var.fabric_capacity_auto_pause_enabled ? 1 : 0
 
   name                    = "FabricCapacityId"
-  resource_group_name     = data.azurerm_resource_group.this.name
+  resource_group_name     = local.resource_group_name
   automation_account_name = azurerm_automation_account.fabric_capacity[0].name
   value                   = azapi_resource.fabric_capacity.id
 }
@@ -193,7 +193,7 @@ resource "azurerm_automation_runbook" "pause_fabric_capacity" {
   count = var.fabric_capacity_auto_pause_enabled ? 1 : 0
 
   name                    = "PauseFabricCapacity"
-  resource_group_name     = data.azurerm_resource_group.this.name
+  resource_group_name     = local.resource_group_name
   location                = var.location
   automation_account_name = azurerm_automation_account.fabric_capacity[0].name
   runbook_type            = "PowerShell"
@@ -214,7 +214,7 @@ resource "azurerm_automation_schedule" "nightly_pause" {
   count = var.fabric_capacity_auto_pause_enabled ? 1 : 0
 
   name                    = "nightly-fabric-capacity-pause"
-  resource_group_name     = data.azurerm_resource_group.this.name
+  resource_group_name     = local.resource_group_name
   automation_account_name = azurerm_automation_account.fabric_capacity[0].name
   frequency               = "Day"
   interval                = 1
@@ -233,7 +233,7 @@ resource "azurerm_automation_schedule" "nightly_pause" {
 resource "azurerm_automation_job_schedule" "nightly_pause" {
   count = var.fabric_capacity_auto_pause_enabled ? 1 : 0
 
-  resource_group_name     = data.azurerm_resource_group.this.name
+  resource_group_name     = local.resource_group_name
   automation_account_name = azurerm_automation_account.fabric_capacity[0].name
   schedule_name           = azurerm_automation_schedule.nightly_pause[0].name
   runbook_name            = azurerm_automation_runbook.pause_fabric_capacity[0].name
@@ -249,8 +249,20 @@ data "fabric_capacity" "this" {
 
   lifecycle {
     postcondition {
+      # Deliberately NOT gated by var.skip_capacity_state_validation
+      # (that variable exists for the narrower ARM-vs-Fabric-visibility
+      # race right after creation, covered by time_sleep.capacity_ready
+      # above -- not for a deliberately-paused capacity). Confirmed
+      # live and the hard way: when the capacity is Paused, the
+      # `fabric` provider can't read the workspace's items at all, and
+      # `terraform plan` responds by showing the *already-existing*
+      # Eventhouse/KQL database/Lakehouse/SQL database as "will be
+      # created" -- a real risk of destroying and recreating the whole
+      # Fabric data estate if that plan were ever applied without
+      # noticing. Failing loudly and early here, before any of that
+      # gets a chance to plan, is much safer than a silent skip.
       condition     = self.state == "Active"
-      error_message = "Fabric Capacity is not in Active state."
+      error_message = "Fabric Capacity is not Active (state: ${self.state}). If this is the nightly auto-pause, run `fabric/manage_capacity.py resume` first -- do not proceed with plan/apply while paused, since Fabric items become unreadable and can show as needing recreation."
     }
   }
 }
@@ -487,7 +499,11 @@ resource "null_resource" "load_business_sql" {
 # ---------------------------------------------------------------------
 
 resource "fabric_connection" "event_hub" {
-  display_name      = "chocolate-factory-event-hub"
+  # Fabric connections are unique tenant-wide, not per-workspace (confirmed
+  # live: a fixed name here collided with another deployment's connection
+  # of the same name in the same tenant) -- suffixed for the same reason
+  # local.fabric_capacity_name and local.suffix exist at all.
+  display_name      = "chocolate-factory-event-hub-${local.suffix}"
   connectivity_type = "ShareableCloud"
 
   connection_details = {
@@ -803,6 +819,28 @@ resource "fabric_data_agent" "business" {
         WorkspaceId   = local.workspace_id
         KqlDatabaseId = fabric_kql_database.this.id
       }
+    }
+  }
+}
+
+# A draft-only Data Agent 404s "while enumerating tools" for any
+# caller -- confirmed live on a fresh redeploy in a second resource
+# group. This step was missing from every previous apply and had only
+# ever been run by hand against the original deployment; not
+# reproducible without it.
+resource "null_resource" "publish_data_agent" {
+  depends_on = [fabric_data_agent.business]
+
+  triggers = {
+    data_agent_id = fabric_data_agent.business.id
+  }
+
+  provisioner "local-exec" {
+    command = "uv run --with azure-identity --with requests ${path.module}/../foundry/agents/publish_data_agent.py"
+
+    environment = {
+      FABRIC_WORKSPACE_ID  = local.workspace_id
+      FABRIC_DATA_AGENT_ID = fabric_data_agent.business.id
     }
   }
 }

@@ -31,6 +31,7 @@ terraform {
 }
 
 provider "azurerm" {
+  subscription_id = var.subscription_id
   features {}
 }
 
@@ -43,4 +44,6 @@ provider "fabric" {}
 # Provisions Microsoft.Fabric/capacities (fabric.tf) -- an ARM resource
 # not exposed by azurerm or the fabric provider. Defaults to Azure CLI
 # auth like the two providers above.
-provider "azapi" {}
+provider "azapi" {
+  subscription_id = var.subscription_id
+}

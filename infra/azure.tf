@@ -2,9 +2,25 @@
 # simulator streams to, and that fabric.tf's Fabric Connection
 # reads from. See README for the auth-mode tradeoff.
 
-variable "resource_group_name" {
-  description = "Name of the resource group to deploy into. Must already exist."
+variable "subscription_id" {
+  description = "Azure subscription ID to deploy into. Mandatory and explicit -- pins the deployment to a specific subscription rather than relying on whichever one happens to be active in the deployer's Azure CLI context, which caused a real mistargeted-deploy risk when working across multiple subscriptions/resource groups in the same session."
   type        = string
+
+  validation {
+    condition     = can(regex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", var.subscription_id))
+    error_message = "subscription_id must be a GUID (az account show --query id -o tsv)."
+  }
+}
+
+variable "resource_group_name" {
+  description = "Name of the resource group to deploy into. Must already exist unless create_resource_group = true."
+  type        = string
+}
+
+variable "create_resource_group" {
+  description = "If true, Terraform creates resource_group_name as a new resource group in location. If false (default), resource_group_name must already exist -- e.g. `az group create -n <name> -l <region>` first."
+  type        = bool
+  default     = false
 }
 
 variable "location" {
@@ -79,7 +95,21 @@ variable "tags" {
   }
 }
 
+# Exactly one of these exists depending on create_resource_group --
+# local.resource_group_id/_name below abstract over which one, so
+# every other resource in this config references the local, not
+# either of these directly.
+resource "azurerm_resource_group" "this" {
+  count = var.create_resource_group ? 1 : 0
+
+  name     = var.resource_group_name
+  location = var.location
+  tags     = var.tags
+}
+
 data "azurerm_resource_group" "this" {
+  count = var.create_resource_group ? 0 : 1
+
   name = var.resource_group_name
 }
 
@@ -91,10 +121,13 @@ locals {
   effective_workspace_identity_principal_id = var.workspace_identity_principal_id != "" ? var.workspace_identity_principal_id : local.workspace_identity_service_principal_id
   use_workspace_identity                    = local.effective_workspace_identity_principal_id != ""
 
+  resource_group_id   = var.create_resource_group ? azurerm_resource_group.this[0].id : data.azurerm_resource_group.this[0].id
+  resource_group_name = var.resource_group_name
+
   # Deterministic suffix from stable inputs -- avoids a stored random_id
   # resource while still keeping names globally unique per RG/prefix pair.
   # Reused by fabric.tf for the Fabric capacity name.
-  suffix                   = substr(md5("${data.azurerm_resource_group.this.id}-${var.name_prefix}"), 0, 8)
+  suffix                   = substr(md5("${local.resource_group_id}-${var.name_prefix}"), 0, 8)
   event_hub_namespace_name = "evhns-${var.name_prefix}-${local.suffix}"
   event_hub_name           = "evh-${var.name_prefix}-telemetry"
 }
@@ -102,7 +135,7 @@ locals {
 resource "azurerm_eventhub_namespace" "this" {
   name                = local.event_hub_namespace_name
   location            = var.location
-  resource_group_name = data.azurerm_resource_group.this.name
+  resource_group_name = local.resource_group_name
   sku                 = var.sku_name
   capacity            = var.sku_capacity
 
@@ -144,7 +177,7 @@ resource "azurerm_eventhub_authorization_rule" "eventstream_listen" {
   name                = "eventstream-listen"
   namespace_name      = azurerm_eventhub_namespace.this.name
   eventhub_name       = azurerm_eventhub.this.name
-  resource_group_name = data.azurerm_resource_group.this.name
+  resource_group_name = local.resource_group_name
 
   listen = true
   send   = false
@@ -189,7 +222,7 @@ output "LOCAL_AUTH_ENABLED" {
 
 resource "azurerm_search_service" "kb" {
   name                = "srch-${var.name_prefix}-${local.suffix}"
-  resource_group_name = data.azurerm_resource_group.this.name
+  resource_group_name = local.resource_group_name
   location            = var.location
   sku                 = "basic"
 
@@ -250,7 +283,7 @@ output "AZURE_SEARCH_PRINCIPAL_ID" {
 
 resource "azurerm_cognitive_account" "foundry" {
   name                = "aif-${var.name_prefix}-${local.suffix}"
-  resource_group_name = data.azurerm_resource_group.this.name
+  resource_group_name = local.resource_group_name
   location            = var.location
   kind                = "AIServices"
   sku_name            = "S0"
@@ -516,6 +549,7 @@ resource "null_resource" "deploy_foundry_agent" {
     azapi_resource.foundry_iq_kb_connection,
     azapi_resource.fabric_data_agent_mcp_connection,
     azapi_resource.fabric_iq_ontology_mcp_connection,
+    null_resource.publish_data_agent,
   ]
 
   triggers = {
