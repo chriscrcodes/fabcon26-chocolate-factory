@@ -41,7 +41,7 @@ Fabric together:
   (preview) bound across the Eventhouse and Lakehouse, a Fabric Data
   Agent grounded in the Eventhouse — Factory/Quality only; a second
   Lakehouse-backed source for Supply Chain/ERP was tried and abandoned,
-  see `foundry/agents/README.md` — a workspace role assignment granting
+  see `fabric/data-agent/README.md` — a workspace role assignment granting
   the
   Azure AI Search service (`azure.tf`) Contributor so its OneLake
   indexer can read the Lakehouse, and `null_resource`s (`hashicorp/null`
@@ -169,7 +169,7 @@ alone doesn't cover, found this way rather than assumed:
   just within this deployment.
 - **The Fabric Data Agent must be published before it can be
   queried**, and nothing in this repo automated that until now
-  (`null_resource.publish_data_agent`, `foundry/agents/publish_data_agent.py`)
+  (`null_resource.publish_data_agent`, `fabric/data-agent/publish_data_agent.py`)
   — it had only ever been run by hand against the original deployment,
   so a fresh redeploy 404'd ("while enumerating tools") until this was
   added.
@@ -178,6 +178,50 @@ alone doesn't cover, found this way rather than assumed:
   table's mirroring policy doesn't mean OneLake's own view of that
   table is queryable yet. `fabric/ontology/deploy_onelake_shortcuts.py`
   now retries with backoff instead of failing on the first attempt.
+
+### Operations Agent — one-time manual portal step required
+
+`fabric_operations_agent.predictive_maintenance` (preview resource,
+`provider "fabric" { preview = true }` in `providers.tf`) monitors
+`silver_tempering.CrystalFormIndex` and is meant to alert when a batch
+drifts outside the Form V target range. Two genuine platform bugs were
+found live while wiring this up, confirmed by isolating each with raw
+REST calls against the Fabric API directly (bypassing Terraform) rather
+than assumed from the Terraform error alone:
+
+- **An `OntologyDefinitions` entry in the `playbook` that isn't
+  referenced by any `RuleDefinition` (via a `RuleCondition` or an
+  `ActionBinding` parameter) makes item creation fail with a
+  `500 InternalError`**, or hang until the provider's create timeout
+  (raised to 30m here) is exceeded. Not documented anywhere found via
+  Microsoft Learn/GitHub search. The fix is structural, not
+  configurable: every property defined in `OntologyDefinitions` must
+  be referenced somewhere in `RuleDefinitions`.
+- **`dataSources[].id` and `shouldRun` are only reliably applied on the
+  item's initial creation call.** Re-pushing the same, valid definition
+  via `updateDefinition` — which is what a routine `terraform apply`
+  does once the resource already exists in state — silently resets
+  `dataSources[].id` to all-zeros and `shouldRun` to `false`, leaving
+  the agent `Inactive` with a broken data-source binding. Confirmed by
+  fetching the item's live definition via `getDefinition` after both a
+  fresh `POST .../items` (correct) and an `updateDefinition` call with
+  byte-identical content (broken) — not a one-off, reproduced twice.
+  `fabric.tf`'s resource block sets `lifecycle { ignore_changes =
+  [definition] }` specifically to stop any future `terraform apply`
+  from ever re-pushing a definition update to this resource and
+  re-triggering the bug.
+
+Because of the second bug, **this resource cannot be made to reach a
+working, running state through the API alone.** `fabric_activator.
+operations_agent_connector` provisions the Activator item the alert
+action's Power Automate connection is stored on, but the connection
+itself and the flow it triggers are portal/Power-Automate-maker-only —
+no REST or Terraform surface exists for either. After `terraform
+apply` creates both items, finish the setup by hand once in the Fabric
+portal following `doc/operations-agent-setup.md`. This is the one part
+of this repo's Fabric estate that isn't fully reproducible via
+`terraform apply` alone — everything else
+documented in this file is.
 
 ### Capacity and trial-tenant limitation
 
@@ -224,6 +268,29 @@ feeds the Event Hub Data Receiver role assignment automatically
 (`fabric.tf`'s `workspace_identity_service_principal_id` local, read by
 `azure.tf`), rather than being a value you'd have to find and paste in by
 hand.
+
+### Agent tracing and observability
+
+`azurerm_application_insights.foundry` (workspace-based, backed by
+`azurerm_log_analytics_workspace.foundry`) is connected to the Foundry
+project via `azapi_resource.foundry_tracing_connection` (`category =
+"AppInsights"`) — creating that connection is what turns on Foundry's
+automatic agent tracing, no separate enable step needed. It captures
+per-tool-call spans (MCP calls, nested Data Agent/KQL calls, final
+model synthesis) with real start/end timestamps, queryable via:
+
+```bash
+az monitor app-insights query --app <AZURE_APP_INSIGHTS_NAME> \
+  --resource-group <resource-group> \
+  --analytics-query "dependencies | where timestamp > ago(1h) | order by timestamp asc"
+```
+
+Confirmed live this is genuinely useful for diagnosing agent latency:
+traced a slow multi-tool query and found tool calls execute strictly
+sequentially with zero overlap (each starts the instant the previous
+one ends) regardless of `parallel_tool_calls` or prompt instructions —
+a Foundry Agent Service platform behavior for remote MCP tools, not
+something fixable from the agent or prompt side.
 
 ### Why Terraform, not Bicep
 

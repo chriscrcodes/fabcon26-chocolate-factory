@@ -379,7 +379,12 @@ resource "fabric_workspace_role_assignment" "search_contributor" {
 # Terraform/REST path yet and stays a manual portal step (see
 # foundry/kb/README.md).
 resource "null_resource" "deploy_search_indexer" {
-  depends_on = [null_resource.load_kb_files, fabric_workspace_role_assignment.search_contributor]
+  depends_on = [
+    null_resource.load_kb_files,
+    fabric_workspace_role_assignment.search_contributor,
+    azurerm_role_assignment.search_foundry_openai_user,
+    azurerm_cognitive_deployment.agent_model,
+  ]
 
   triggers = {
     files_hash = filesha256("${path.module}/../foundry/kb/deploy_search_indexer.py")
@@ -389,10 +394,12 @@ resource "null_resource" "deploy_search_indexer" {
     command = "uv run --with requests ${path.module}/../foundry/kb/deploy_search_indexer.py"
 
     environment = {
-      AZURE_SEARCH_ENDPOINT  = "https://${azurerm_search_service.kb.name}.search.windows.net"
-      AZURE_SEARCH_ADMIN_KEY = azurerm_search_service.kb.primary_key
-      FABRIC_WORKSPACE_ID    = local.workspace_id
-      FABRIC_LAKEHOUSE_ID    = fabric_lakehouse.dimensions.id
+      AZURE_SEARCH_ENDPOINT               = "https://${azurerm_search_service.kb.name}.search.windows.net"
+      AZURE_SEARCH_ADMIN_KEY              = azurerm_search_service.kb.primary_key
+      FABRIC_WORKSPACE_ID                 = local.workspace_id
+      FABRIC_LAKEHOUSE_ID                 = fabric_lakehouse.dimensions.id
+      AZURE_FOUNDRY_ACCOUNT_ENDPOINT      = azurerm_cognitive_account.foundry.endpoint
+      AZURE_FOUNDRY_MODEL_DEPLOYMENT_NAME = azurerm_cognitive_deployment.agent_model.name
     }
   }
 }
@@ -808,13 +815,13 @@ resource "fabric_data_agent" "business" {
 
   definition = {
     "Files/Config/data_agent.json" = {
-      source = "${path.module}/../foundry/agents/data-agent/data_agent.json.tmpl"
+      source = "${path.module}/../fabric/data-agent/data_agent.json.tmpl"
     }
     "Files/Config/draft/stage_config.json" = {
-      source = "${path.module}/../foundry/agents/data-agent/draft/stage_config.json.tmpl"
+      source = "${path.module}/../fabric/data-agent/draft/stage_config.json.tmpl"
     }
     "Files/Config/draft/kusto-eventhouse/datasource.json" = {
-      source = "${path.module}/../foundry/agents/data-agent/draft/kusto-eventhouse/datasource.json.tmpl"
+      source = "${path.module}/../fabric/data-agent/draft/kusto-eventhouse/datasource.json.tmpl"
       tokens = {
         WorkspaceId   = local.workspace_id
         KqlDatabaseId = fabric_kql_database.this.id
@@ -836,7 +843,7 @@ resource "null_resource" "publish_data_agent" {
   }
 
   provisioner "local-exec" {
-    command = "uv run --with azure-identity --with requests ${path.module}/../foundry/agents/publish_data_agent.py"
+    command = "uv run --with azure-identity --with requests ${path.module}/../fabric/data-agent/publish_data_agent.py"
 
     environment = {
       FABRIC_WORKSPACE_ID  = local.workspace_id
@@ -848,5 +855,92 @@ resource "null_resource" "publish_data_agent" {
 output "FABRIC_DATA_AGENT_ID" {
   description = "Shared Fabric Data Agent item ID (Eventhouse + Fabric SQL Database)."
   value       = fabric_data_agent.business.id
+}
+
+# ---------------------------------------------------------------------
+# Operations Agent -- a Fabric Real-Time Intelligence item, distinct
+# from the Data Agent above: not a conversational Q&A tool, but an
+# LLM-configured monitoring/alerting agent that continuously evaluates
+# its own instructions against a live data source and notifies when
+# conditions are met (https://learn.microsoft.com/en-us/fabric/real-time-intelligence/operations-agent).
+# Monitors the tempering stage's CrystalFormIndex (silver_tempering,
+# not currently used by the Data Agent above) as a predictive-quality
+# signal -- catching drift at the tempering stage rather than waiting
+# for the downstream quality check, per foundry/kb/01-factory-quality.md's
+# existing description of what CrystalFormIndex measures.
+#
+# Preview resource: needs `preview = true` on the provider (providers.tf)
+# and, per its own docs, doesn't support service-principal auth --
+# already satisfied since this repo's Terraform always runs under the
+# deploying user's own Azure CLI session, never a service principal.
+# Schema confirmed from
+# https://learn.microsoft.com/en-us/rest/api/fabric/articles/item-management/definitions/operations-agent-definition
+# (not documented on the Terraform resource page itself).
+# ---------------------------------------------------------------------
+
+variable "operations_agent_recipient_upn" {
+  description = "UPN the Operations Agent sends Teams alerts to. Defaults to the first fabric_capacity_admin_members entry if left empty."
+  type        = string
+  default     = ""
+}
+
+locals {
+  operations_agent_recipient_upn = var.operations_agent_recipient_upn != "" ? var.operations_agent_recipient_upn : var.fabric_capacity_admin_members[0]
+}
+
+# Stores the SendTemperingAlert action's Power Automate connection
+# string -- see doc/operations-agent-setup.md for the one-time manual
+# steps (connection string + flow) this repo can't automate: nothing in
+# the fabric_operations_agent definition schema references this item,
+# the link only exists on the Fabric portal/Power Automate side.
+resource "fabric_activator" "operations_agent_connector" {
+  display_name = "chocolate-factory-operations-agent-connector"
+  workspace_id = local.workspace_id
+}
+
+resource "fabric_operations_agent" "predictive_maintenance" {
+  depends_on = [null_resource.load_kql]
+
+  display_name = "chocolate_factory_predictive_maintenance"
+  workspace_id = local.workspace_id
+  format       = "Default"
+
+  definition = {
+    "Configurations.json" = {
+      source = "${path.module}/../fabric/operations-agent/Configurations.json.tmpl"
+      tokens = {
+        WorkspaceId   = local.workspace_id
+        KqlDatabaseId = fabric_kql_database.this.id
+        RecipientUpn  = local.operations_agent_recipient_upn
+      }
+    }
+  }
+
+  timeouts = {
+    create = "30m"
+  }
+
+  # This preview API's dataSources[].id and shouldRun are only reliably
+  # honored on the item's *initial* create call -- confirmed live that
+  # re-pushing the same definition via updateDefinition (what a routine
+  # `terraform apply` would do once this resource already exists) silently
+  # resets dataSources[].id to all-zeros and shouldRun to false, leaving
+  # the agent Inactive with a broken data-source binding. Terraform must
+  # never push a definition update to this resource after initial
+  # creation -- see infra/README.md's Operations Agent section for the
+  # one-time manual portal finish-up this requires instead.
+  lifecycle {
+    ignore_changes = [definition]
+  }
+}
+
+output "FABRIC_OPERATIONS_AGENT_ID" {
+  description = "Predictive-maintenance Operations Agent item ID."
+  value       = fabric_operations_agent.predictive_maintenance.id
+}
+
+output "FABRIC_OPERATIONS_AGENT_CONNECTOR_ID" {
+  description = "Activator item used to store SendTemperingAlert's Power Automate connection -- see doc/operations-agent-setup.md."
+  value       = fabric_activator.operations_agent_connector.id
 }
 

@@ -354,6 +354,17 @@ resource "azurerm_role_assignment" "foundry_project_search_reader" {
   principal_id         = azurerm_cognitive_account_project.chocolate_factory.identity[0].principal_id
 }
 
+# Reverse direction of the grant above: lets the Search service's own
+# system-assigned identity call chat completions on the Foundry account,
+# needed for the knowledge base's retrievalReasoningEffort "medium"
+# query-planning model (foundry/kb/deploy_search_indexer.py) to
+# authenticate without a stored API key.
+resource "azurerm_role_assignment" "search_foundry_openai_user" {
+  scope                = azurerm_cognitive_account.foundry.id
+  role_definition_name = "Cognitive Services OpenAI User"
+  principal_id         = azurerm_search_service.kb.identity[0].principal_id
+}
+
 # Project connection wiring the Foundry IQ knowledge base's MCP endpoint
 # in as a "RemoteTool" the agent can call. No azurerm resource models
 # this: azurerm_cognitive_account_connection_* is account-scoped, not
@@ -388,6 +399,66 @@ resource "azapi_resource" "foundry_iq_kb_connection" {
   }
 
   depends_on = [azurerm_role_assignment.foundry_project_search_reader]
+}
+
+# Observability for the Foundry agent -- tool-call/MCP-call traces
+# (spans, timing) needed to diagnose query latency. Workspace-based
+# Application Insights (the only shape azurerm/Azure now support for
+# new resources; `workspace_id` makes it workspace-based) backed by a
+# Log Analytics workspace. Modest defaults (PerGB2018, 30-day
+# retention) -- this is diagnostic tooling, not a cost center to
+# optimize like the Fabric capacity.
+resource "azurerm_log_analytics_workspace" "foundry" {
+  name                = "log-${var.name_prefix}-${local.suffix}"
+  resource_group_name = local.resource_group_name
+  location            = var.location
+  sku                 = "PerGB2018"
+  retention_in_days   = 30
+}
+
+resource "azurerm_application_insights" "foundry" {
+  name                = "appi-${var.name_prefix}-${local.suffix}"
+  resource_group_name = local.resource_group_name
+  location            = var.location
+  workspace_id        = azurerm_log_analytics_workspace.foundry.id
+  application_type    = "web"
+}
+
+# Project connection enabling Foundry's automatic agent tracing
+# (tool/MCP calls, spans, timing via OpenTelemetry) -- creating this
+# connection is what turns tracing on, no separate API call needed.
+# Same azapi_resource pattern as foundry_iq_kb_connection above and for
+# the same reason: "AppInsights" isn't in azapi's bundled `category`
+# enum for this preview API version (confirmed against the ARM
+# template reference), so schema validation has to be disabled.
+resource "azapi_resource" "foundry_tracing_connection" {
+  type      = "Microsoft.CognitiveServices/accounts/projects/connections@2025-10-01-preview"
+  name      = "chocolate-factory-tracing"
+  parent_id = azurerm_cognitive_account_project.chocolate_factory.id
+
+  schema_validation_enabled = false
+
+  body = {
+    properties = {
+      authType = "ApiKey"
+      category = "AppInsights"
+      target   = azurerm_application_insights.foundry.id
+      credentials = {
+        key = azurerm_application_insights.foundry.connection_string
+      }
+      isSharedToAll = true
+    }
+  }
+}
+
+output "AZURE_LOG_ANALYTICS_WORKSPACE_NAME" {
+  description = "Log Analytics workspace backing Application Insights."
+  value       = azurerm_log_analytics_workspace.foundry.name
+}
+
+output "AZURE_APP_INSIGHTS_NAME" {
+  description = "Application Insights resource providing Foundry agent tracing (tool calls, spans, timing) -- view in the Foundry portal's Agents > Traces, or query directly in this resource's Logs blade."
+  value       = azurerm_application_insights.foundry.name
 }
 
 data "azurerm_client_config" "current" {}
@@ -470,9 +541,14 @@ resource "azapi_resource" "fabric_iq_ontology_mcp_connection" {
 # state and rejected live: "ServiceModelDeprecating ... cannot be used
 # for new deployments" -- checked `az cognitiveservices account
 # list-models` for current GA options rather than assuming an older
-# model name still works). Plenty for a demo agent answering grounded
-# factual questions rather than doing complex reasoning. GlobalStandard
-# SKU, minimum capacity (10 = 10K TPM).
+# model name still works). GlobalStandard SKU, capacity 1000 (1M TPM) --
+# raised from the original minimum (10 = 10K TPM) to give headroom for
+# the Foundry IQ knowledge base's own query-planning calls against this
+# same deployment (retrievalReasoningEffort "medium",
+# foundry/kb/deploy_search_indexer.py) on top of the agent's own
+# multi-tool orchestration calls. Confirmed live via `mcp__azure__quota`
+# that the subscription's GlobalStandard quota for this model
+# (6,000 units / 6M TPM in swedencentral) has ample headroom.
 resource "azurerm_cognitive_deployment" "agent_model" {
   name                 = "gpt-5.4-mini"
   cognitive_account_id = azurerm_cognitive_account.foundry.id
@@ -485,7 +561,7 @@ resource "azurerm_cognitive_deployment" "agent_model" {
 
   sku {
     name     = "GlobalStandard"
-    capacity = 10
+    capacity = 1000
   }
 }
 

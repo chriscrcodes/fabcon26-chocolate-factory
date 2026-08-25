@@ -49,10 +49,16 @@ Five REST calls, `PUT .../{kind}/{name}?api-version=<version>`:
    referencing that same configuration by name.
 5. Knowledge base: wraps the knowledge source above,
    `outputMode: "extractiveData"` (no LLM-generated answers, just
-   ranked passages) and `retrievalReasoningEffort: {"kind": "minimal"}`
-   (the one reasoning tier that doesn't require an attached model
-   deployment). Querying this also requires semantic ranking enabled at
-   the *service* level (`semantic_search_sku` in `azure.tf`'s
+   ranked passages) and `retrievalReasoningEffort: {"kind": "medium"}`,
+   which performs query planning/iterative search over the knowledge
+   source before returning passages -- unlike `"minimal"`, this
+   requires an attached chat-completion model (`models[]`, referencing
+   the same `gpt-5.4-mini` deployment `azure.tf` provisions for the
+   agent itself). The Search service authenticates to that model via
+   its own system-assigned identity (`azurerm_role_assignment.
+   search_foundry_openai_user` in `azure.tf`) rather than an API key.
+   Querying this also requires semantic ranking enabled at the
+   *service* level (`semantic_search_sku` in `azure.tf`'s
    `azurerm_search_service.kb` -- a separate setting from the index's
    own `semantic.configurations[]` block above).
 
@@ -88,6 +94,8 @@ def main() -> None:
     admin_key = os.environ["AZURE_SEARCH_ADMIN_KEY"]
     workspace_id = os.environ["FABRIC_WORKSPACE_ID"]
     lakehouse_id = os.environ["FABRIC_LAKEHOUSE_ID"]
+    foundry_endpoint = os.environ["AZURE_FOUNDRY_ACCOUNT_ENDPOINT"]
+    foundry_model_deployment = os.environ["AZURE_FOUNDRY_MODEL_DEPLOYMENT_NAME"]
 
     session = requests.Session()
     session.headers.update({"api-key": admin_key, "Content-Type": "application/json"})
@@ -199,7 +207,17 @@ def main() -> None:
             "name": KNOWLEDGE_BASE_NAME,
             "outputMode": "extractiveData",
             "knowledgeSources": [{"name": KNOWLEDGE_SOURCE_NAME}],
-            "retrievalReasoningEffort": {"kind": "minimal"},
+            "retrievalReasoningEffort": {"kind": "medium"},
+            "models": [
+                {
+                    "kind": "azureOpenAI",
+                    "azureOpenAIParameters": {
+                        "resourceUri": foundry_endpoint,
+                        "deploymentId": foundry_model_deployment,
+                        "modelName": foundry_model_deployment,
+                    },
+                }
+            ],
         },
         api_version=PREVIEW_API_VERSION,
     )

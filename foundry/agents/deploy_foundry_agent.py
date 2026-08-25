@@ -106,7 +106,14 @@ def build_definition() -> dict:
             "which recipe, which batch used which line). Pick the tool "
             "that matches the question's shape, cite which tool you "
             "used, and say plainly when a question needs data none of "
-            "these three cover rather than guessing."
+            "these three cover rather than guessing. When a question "
+            "has multiple independent parts -- parts that don't need "
+            "each other's results -- call the tools for those parts "
+            "concurrently instead of one after another. Only chain "
+            "tool calls sequentially when one call's output is a "
+            "required input to the next (e.g. resolving a factory via "
+            "fabric_iq_ontology before querying fabric_data_agent for "
+            "that same factory's quality checks)."
         ),
         "tools": [
             {

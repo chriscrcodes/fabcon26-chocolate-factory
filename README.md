@@ -1,84 +1,185 @@
-# fabcon26-chocolate-factory
+# 🍫 Chocolate Factory — Fabric + Foundry in Action
 
-A FabCon demo: a chocolate factory scenario spanning Microsoft Fabric
-(Real-Time Intelligence, Fabric IQ Ontology, Fabric SQL Database) and
-Microsoft Foundry (Foundry IQ knowledge bases, agents), kept separate
-from the vendored accelerators in `sources/` (each is its own upstream
-git repo — we don't edit them in place).
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![IaC: Terraform](https://img.shields.io/badge/IaC-Terraform-844FBA?logo=terraform&logoColor=white)](infra)
+[![Microsoft Fabric](https://img.shields.io/badge/Microsoft-Fabric-0078D4?logo=microsoft&logoColor=white)](fabric)
+[![Microsoft Foundry](https://img.shields.io/badge/Microsoft-Foundry-0078D4?logo=microsoft&logoColor=white)](foundry)
+[![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](simulator)
 
-Organized by the three conceptual layers of the demo:
+A live, full-stack demo built for FabCon Europe 2026: four virtual
+chocolate factories stream real production telemetry into Microsoft
+Fabric, ground a real Fabric IQ Ontology and a Foundry IQ knowledge
+base, and get answered live by a single Microsoft Foundry agent that
+picks the right tool per question — and cites it.
 
-## `simulator/` — the data source
+Nothing here is a mockup. Every box in the diagrams below is real,
+deployed infrastructure, provisioned by one `terraform apply`.
 
-[`simulator/`](simulator) — standalone Python data generator. Streams
-production-line telemetry (`sensor_reading`, `quality_check`,
-`batch_event`, `line_status`) to Azure Event Hub, matching
-`fabric/ontology/ontology_config.json` field-for-field. Not (yet) a
-patch to `sources/fabric-data-generation` — it's an independent
-producer that any Fabric Eventstream can consume. Also generates the
-Supply Chain/ERP seed data (`run_business_seed.py`) — batch, not
-streamed, per the medallion-layers memo's two-plane design.
+**4** factories · **10** production lines · **22** ontology entities ·
+**27** bound relationships · **3** agent tools · **1** `terraform apply`
 
-## `fabric/` — the data platform
+## 🏭 What it is
 
-- [`fabric/ontology/`](fabric/ontology) — chocolate scenario:
-  `ontology_config.json` (all 3 agent domains), dimension
-  `tables/*.csv`, `farm-preparation.md`. Deployed as a real **Fabric IQ
-  Ontology** item (preview), bound across the live Eventhouse and a
-  Lakehouse (holding Factory/Quality's dimension tables and all 9
-  Supply Chain/ERP tables, mirrored from the Fabric SQL Database since
-  the Ontology has no direct SQL Database binding) — see
-  `fabric/ontology/README.md`'s "Deploying to Fabric IQ" section.
-- [`fabric/eventhouse/`](fabric/eventhouse) — Bronze/Silver/Gold KQL for
-  the Eventhouse: raw ingestion tables, per-stage Silver pivots +
-  dimension joins, and Gold rollups (one materialized view, three
-  functions — see the medallion-layers design memo for why), plus
-  `eventstream.json` routing the generator's four `RecordType`s into the
-  four Bronze tables. Deployed and verified end to end against a live
-  Eventhouse — see `fabric/eventhouse/README.md`'s "Verified against a
-  live tenant" section for the issues that surfaced only from a real run
-  and how they were fixed.
-- [`fabric/sql-database/`](fabric/sql-database) — Supply Chain/ERP
-  tables (9 total) + 3 Gold views on a Fabric SQL Database — the
-  batch/transactional plane. Deployed and verified end to end against a
-  real tenant — see `fabric/sql-database/README.md`.
+- **4 factories** (Barcelona, Chicago, São Paulo, Singapore), each with
+  2–3 production lines cycling through a 6-stage chocolate-making
+  process, streaming live sensor/quality/batch telemetry
+- **A full medallion architecture** on Fabric Real-Time Intelligence
+  (Eventhouse Bronze → Silver → Gold)
+- **A Fabric IQ Ontology** binding that telemetry together with Supply
+  Chain/ERP data into one queryable graph — 22 entity types, 27 real
+  bound relationships
+- **A Foundry IQ knowledge base** grounding policy/definition questions
+  a schema alone can't answer
+- **One Foundry Agent Service agent**, `chocolate-factory-agent`,
+  reasoning across all three live and citing which tool it used —
+  including chaining two tools together when a question needs it
+- **A Fabric Operations Agent** watching the tempering stage for
+  early defect signals
 
-## `foundry/` — the agentic layer
+## 🗺️ Architecture
 
-- [`foundry/kb/`](foundry/kb) — unstructured knowledge-base documents
-  for Foundry IQ: process glossary, sensor metric ranges, business-rule
-  definitions per domain. Uploaded to OneLake and indexed into a
-  complete, queryable Foundry IQ knowledge base — data source, index,
-  indexer, knowledge source, and knowledge base itself all provisioned
-  by `terraform apply` — deployed and verified end to end — see
-  `foundry/kb/README.md`. The one remaining manual step is
-  project-level (adding the Search service as a Connected resource on
-  the Foundry project) — see `foundry/kb/foundry-iq-setup.md`.
-- `foundry/agents/` — not started. Coordinator + domain-specialist
-  (Factory/Quality, Supply Chain, ERP/Orders) instructions and
-  orchestration config for Microsoft Foundry.
+```mermaid
+flowchart LR
+    SIM["simulator"] -->|Event Hub| ES["Eventstream"]
+    ES --> EH["Eventhouse\nBronze / Silver / Gold KQL"]
+    SQL["Fabric SQL Database\nSupply Chain / ERP"] --> ONT
+    EH -->|OneLake mirroring| ONT["Fabric IQ Ontology\n22 entities, 27 relationships"]
+    KB["foundry/kb/*.md"] -->|Azure AI Search| FKB["Foundry IQ\nknowledge base"]
+    EH -->|Fabric Data Agent| AGENT["chocolate-factory-agent\n(Foundry Agent Service)"]
+    ONT --> AGENT
+    FKB --> AGENT
+    EH -->|Operations Agent| ALERT["Alert\n(Power Automate / Teams)"]
+```
 
-## Cross-cutting
+One `terraform apply` provisions every box above.
 
-- [`infra/`](infra) — one Terraform state for Azure (Event Hub, Azure AI
-  Search) and Fabric (capacity, workspace, Eventhouse, KQL Database,
-  Connection, Eventstream, dimension Lakehouse, Fabric SQL Database,
-  Fabric IQ Ontology). Provisions a real Azure Fabric capacity (F2 by
-  default) rather than assuming one exists — spans both `fabric/` and
-  `foundry/`, so it stays top-level rather than nested in either.
-  Deployed and verified against a real tenant — see `infra/README.md`.
-- [`doc/`](doc) — design memos as repo-tracked markdown, spanning the
-  whole scenario rather than one layer: `cacao-data-model.md`
-  (factories, process, entity model) and `cacao-medallion-layers.md`
-  (Bronze/Silver/Gold design + the Kusto-docs reality check).
+### Domain model: factories, the ontology, and the Fabric / Foundry split
 
-Nine production stages in three phases (Farm Preparation / Factory
-Processing / Finishing) — Farm Preparation happens off-site near cocoa
-origin, so only the six in-factory stages are modelled as
-`production_stage` rows; see `fabric/ontology/farm-preparation.md`. Four
-factories (EMEA-BCN Barcelona, NA-CHI Chicago, LATAM-GRU São Paulo,
-APAC-SIN Singapore), 2-3 production lines each.
+```mermaid
+flowchart TB
+    subgraph FACTORIES["4 factories"]
+        direction LR
+        BCN["Barcelona\nEMEA-BCN"]
+        CHI["Chicago\nNA-CHI"]
+        GRU["São Paulo\nLATAM-GRU"]
+        SIN["Singapore\nAPAC-SIN"]
+    end
 
-See [`doc/cacao-data-model.md`](doc/cacao-data-model.md) and
-[`doc/cacao-medallion-layers.md`](doc/cacao-medallion-layers.md) for the
-full entity model and rationale.
+    subgraph FABRIC["Microsoft Fabric"]
+        subgraph ONTOLOGY["Fabric IQ Ontology -- 22 entities, 27 relationships"]
+            direction LR
+            FQ["Factory & Quality\nfactory, line, batch,\nsensor_reading, quality_check"]
+            SC["Supply Chain\nsupplier, material,\ninventory, shipment"]
+            ERP["ERP & Orders\ncustomer, product,\nsales_order, invoice"]
+            SC -->|shipment_to_factory| FQ
+            ERP -->|product_to_recipe| FQ
+        end
+    end
+
+    subgraph FOUNDRY["Microsoft Foundry"]
+        AGENT["chocolate-factory-agent"]
+    end
+
+    FACTORIES -->|live telemetry| FQ
+    ONTOLOGY -->|fabric_iq_ontology tool| AGENT
+    FQ -->|fabric_data_agent tool| AGENT
+```
+
+Supply Chain and ERP only ever connect to Factory & Quality, never to
+each other directly — a real gap in the data model, not a diagram
+simplification (see "Known limitations" below).
+
+## 📂 Repository map
+
+| Folder | What's there |
+|---|---|
+| [`simulator/`](simulator) | Python telemetry generator streaming production-line events to Event Hub |
+| [`fabric/`](fabric) | The Fabric side: Eventhouse KQL, the Ontology, the SQL Database, the Data Agent, and the Operations Agent |
+| [`foundry/`](foundry) | The Foundry side: the agent itself (`foundry/agents/`) and the Foundry IQ knowledge base (`foundry/kb/`) |
+| [`infra/`](infra) | One Terraform state provisioning everything above, Azure and Fabric together |
+| [`doc/`](doc) | Design memos, the demo script, and the live-verified question bank |
+
+Each subfolder (`fabric/eventhouse/`, `fabric/ontology/`,
+`fabric/sql-database/`, `fabric/data-agent/`, `foundry/kb/`,
+`foundry/agents/`) has its own README with the detail for that piece.
+
+## ⚡ Quick start
+
+```bash
+cd infra
+cp terraform.tfvars.example terraform.tfvars   # fill in your Azure/Fabric values
+terraform init
+terraform apply
+```
+
+One `terraform apply` against any subscription, into any existing
+resource group, provisions the whole stack: the Fabric capacity,
+workspace, Eventhouse, Ontology, SQL Database, the Foundry IQ
+knowledge base, the Foundry project, and the agent itself — wired to
+all its tools. See [`infra/README.md`](infra/README.md) for full
+details, including the couple of things that stay genuinely manual
+(called out there, not hidden).
+
+Then start the simulator to see live data flow:
+
+```bash
+cd simulator
+uv run --env-file .env run_simulator.py
+```
+
+## 🎤 The demo
+
+Full script — what to ask, in what order, and why — in
+[`doc/fabcon-demo-scenario.md`](doc/fabcon-demo-scenario.md); the
+complete, live-verified question bank in
+[`doc/questions.md`](doc/questions.md). Short version: the agent picks
+the right tool per question and cites it.
+
+- *"What counts as an overdue invoice?"* → the knowledge base, with a
+  citation
+- *"Are there any anomalies I should be aware of?"* → live telemetry
+  via the Fabric Data Agent
+- *"Which factories are receiving shipments, and how many quality
+  checks failed today at those same factories?"* → the agent chains
+  the Ontology and the Data Agent together, one feeding the other
+
+## ✅ Verified, not asserted
+
+Every question in [`doc/questions.md`](doc/questions.md) is tagged by
+what actually happened when it was run against the live, deployed
+stack — not what should happen in theory:
+
+| | Count | Meaning |
+|---|---|---|
+| ✅ Verified | 11 | Run live, exact result recorded — safe to use as-is |
+| 🧪 Candidate | 8 | Plausible given the real data model, not yet run live |
+| ❌ Known to fail | 4 | Run live and failed, with the diagnosed reason |
+
+The "Known limitations" below come from that same discipline — real
+failures, kept in the docs instead of quietly dropped.
+
+## ⚠️ Known limitations
+
+Stated plainly, not hidden:
+
+- The Fabric Data Agent only grounds Factory/Quality telemetry — a
+  second Lakehouse-backed source for Supply Chain/ERP was tried and
+  doesn't work as of this writing (see
+  [`fabric/data-agent/README.md`](fabric/data-agent/README.md));
+  Supply Chain/ERP grounding comes from the Ontology tool instead.
+- No `recipe`/`batch` → `material`/`supplier` relationship exists in
+  the Ontology — it can answer "who are our suppliers" but not
+  genuine lot-level traceability ("which supplier fed this specific
+  batch"). A real data gap, not a config issue: that data was never
+  generated on either the simulator or seed-data side.
+- The Operations Agent needs one manual portal step after `terraform
+  apply` to connect its alert action — see
+  [`doc/operations-agent-setup.md`](doc/operations-agent-setup.md).
+- Two things stay outside Terraform's reach on a fresh deploy: Fabric
+  IQ's region availability, and Fabric workspace access for anyone who
+  isn't the person who ran `terraform apply` — see
+  [`infra/README.md`](infra/README.md).
+
+## 📜 License
+
+MIT — see [`LICENSE`](LICENSE).

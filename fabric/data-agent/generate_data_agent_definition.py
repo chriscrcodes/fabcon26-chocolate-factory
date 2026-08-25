@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Generate the `elements` tree for the shared Fabric Data Agent's
-kusto-eventhouse/datasource.json (foundry/agents/data-agent/draft/kusto-eventhouse/datasource.json.tmpl).
+kusto-eventhouse/datasource.json (fabric/data-agent/draft/kusto-eventhouse/datasource.json.tmpl).
 
 Schema verified against
 https://learn.microsoft.com/en-us/rest/api/fabric/articles/item-management/definitions/data-agent-definition
@@ -35,7 +35,7 @@ identically both via this agent's MCP endpoint and the portal's own
 native chat panel ("the available data sources do not contain supplier
 information"). Concluded this is a current product limitation of Data
 Agent + Lakehouse Tables for this data shape, not a configuration
-mistake -- see foundry/agents/README.md for the full sequence tried
+mistake -- see fabric/data-agent/README.md for the full sequence tried
 (kept there for anyone revisiting this once the underlying Fabric
 feature matures). Supply Chain/ERP grounding for the Foundry agent
 comes from the Fabric IQ Ontology (already covers all 9 tables with 27
@@ -47,7 +47,7 @@ matching this repo's existing determinism convention
 
 Usage: uv run generate_data_agent_definition.py
 Output: overwrites the `elements` field in-place in
-foundry/agents/data-agent/draft/kusto-eventhouse/datasource.json.tmpl
+fabric/data-agent/draft/kusto-eventhouse/datasource.json.tmpl
 """
 
 import json
