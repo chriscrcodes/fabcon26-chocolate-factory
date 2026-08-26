@@ -32,7 +32,22 @@ terraform {
 
 provider "azurerm" {
   subscription_id = var.subscription_id
-  features {}
+
+  # Application Insights auto-provisions two companion resources
+  # (a "Smart Detection" action group and a "Failure Anomalies" smart
+  # detector alert rule) as a side effect, outside any resource block
+  # here -- Terraform never tracks them in state, so a normal destroy
+  # can't remove them, and the default containment check then refuses
+  # to delete the resource group while they're still in it. Confirmed
+  # live: destroying everything else first, then trying to delete the
+  # resource group, failed with exactly this. false lets Terraform
+  # delete the resource group directly via the Azure API instead of
+  # checking its contents first, clearing up these orphans too.
+  features {
+    resource_group {
+      prevent_deletion_if_contains_resources = false
+    }
+  }
 }
 
 # Defaults to Azure CLI auth (`az login`) -- same as azurerm above, no
