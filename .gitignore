@@ -15,7 +15,9 @@ __pycache__/
 *.tfstate
 *.tfstate.*
 terraform.tfvars
+terraform.*.tfvars
 tfplan
+*.tfplan
 crash.log
 
 

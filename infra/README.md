@@ -84,6 +84,58 @@ Event Hub auth, chosen by whether a workspace identity is available
   Eventstream authenticates via Entra ID rather than a shared access key
   — see "Eventstream's Event Hub source auth" below.
 
+### Prerequisites
+
+Beyond `terraform.tfvars` values, the deploying identity and machine need
+the following in place. Each of these tends to surface only partway through
+`terraform apply` (earlier resources create fine before the failure), so
+confirm them up front rather than discovering them one apply at a time:
+
+- **A Fabric-licensed identity recognized by the Connections API.** The
+  deploying user must be able to create Fabric Connections, not just browse
+  the Fabric portal — general workspace access (a Power BI Pro/PPU license
+  alone) is not sufficient in every tenant. If `terraform plan` fails on
+  `fabric_connection.event_hub` with `UserNotLicensed`/401 despite portal
+  access working, use a dedicated Fabric administrator account instead.
+- **Fabric capacity admins all in one tenant.** Every UPN/object ID in
+  `fabric_capacity_admin_members` must belong to the same AAD tenant as the
+  deploying identity — capacity creation fails ("All administrators must
+  belong to the same tenant") otherwise.
+- **RBAC: Owner, or Contributor + User Access Administrator, on the target
+  resource group.** This config creates several `azurerm_role_assignment`
+  resources (Event Hub, Search, and Cognitive Services scopes); Contributor
+  alone can't write role assignments and fails with `AuthorizationFailed`.
+- **Azure OpenAI quota for the deployed model/SKU in the target region**,
+  confirmed before applying (`az cognitiveservices usage list --location
+  <region>`, checking the relevant `OpenAI.<Sku>.<model>` entry). This
+  config deploys `gpt-5.4-mini` on the `DataZoneStandard` SKU (see
+  `azure.tf`) rather than `GlobalStandard`, since `GlobalStandard` quota for
+  this model can be 0 in a given subscription/region regardless of other
+  deployments already running elsewhere in the same subscription.
+- **Fabric IQ (Ontology) enabled at the tenant level.** The Ontology item
+  this config creates requires a Fabric Admin Portal tenant setting for
+  Fabric IQ / Ontology (preview) to be turned on — separate from general
+  Fabric licensing above. `null_resource.deploy_ontology` fails with
+  `FeatureNotAvailable` if it isn't (visible in the script's own error
+  output as an HTTP 403 with `errorCode: FeatureNotAvailable`).
+- **A CA bundle that trusts your org's TLS-inspecting proxy, if any** (e.g.
+  Zscaler). Several `local-exec` provisioners (`load_kql`,
+  `load_dimension_tables`, `load_kb_files`, `deploy_ontology`, and others)
+  call Fabric/Kusto endpoints directly via Python's `requests`, which fails
+  with `SSLCertVerificationError` if the proxy's root CA isn't in a bundle
+  `requests`/`certifi` trusts. Export `SSL_CERT_FILE` and
+  `REQUESTS_CA_BUNDLE` to a bundle containing that root CA before running
+  `terraform apply` — on macOS, `security find-certificate -a -p
+  /Library/Keychains/System.keychain` concatenated with certifi's own
+  `cacert.pem` covers it.
+- **[`uv`](https://docs.astral.sh/uv/)** on the machine running `terraform
+  apply` — several `local-exec` provisioners shell out via `uv run --with
+  ...`, e.g. `null_resource.load_kql`'s `uv run --with azure-kusto-data
+  --with azure-identity ../fabric/eventhouse/run_kql.py`, which deploys
+  `fabric/eventhouse/01`-`03`'s KQL and seeds the `ref_*` dimension tables
+  from `fabric/ontology/tables/*.csv` (skipped if already populated, so
+  re-applies don't duplicate rows).
+
 ### Deploy
 
 ```bash
@@ -98,20 +150,8 @@ a real risk when working across multiple subscriptions/resource groups
 in the same session). `resource_group_name` must already exist unless
 `create_resource_group = true`, in which case Terraform creates it.
 
-Also requires [`uv`](https://docs.astral.sh/uv/) on the machine running
-`terraform apply` — `null_resource.load_kql`'s `local-exec` provisioner
-shells out to `uv run --with azure-kusto-data --with azure-identity
-../fabric/eventhouse/run_kql.py` to deploy `fabric/eventhouse/01`-`03`'s KQL and
-seed the `ref_*` dimension tables from `fabric/ontology/tables/*.csv`
-(skipped if already populated, so re-applies don't duplicate rows) —
-nothing manual is left after `terraform apply` completes.
-
-If this step fails with `SSLCertVerificationError`, a corporate
-TLS-inspecting proxy (e.g. Zscaler) is likely intercepting the
-connection to the Kusto endpoint — export `SSL_CERT_FILE` /
-`REQUESTS_CA_BUNDLE` pointing at a CA bundle that includes your
-org's root CA before running `terraform apply` (a local-machine
-fix, not something this config bakes in).
+Nothing manual is left after `terraform apply` completes, assuming the
+prerequisites above are met.
 
 ### Reproducing on a different subscription
 

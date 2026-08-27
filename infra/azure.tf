@@ -546,9 +546,13 @@ resource "azapi_resource" "fabric_iq_ontology_mcp_connection" {
 # the Foundry IQ knowledge base's own query-planning calls against this
 # same deployment (retrievalReasoningEffort "medium",
 # foundry/kb/deploy_search_indexer.py) on top of the agent's own
-# multi-tool orchestration calls. Confirmed live via `mcp__azure__quota`
-# that the subscription's GlobalStandard quota for this model
-# (6,000 units / 6M TPM in swedencentral) has ample headroom.
+# multi-tool orchestration calls. GlobalStandard quota for this model
+# is 0 across every region on this subscription (confirmed via `az
+# cognitiveservices usage list` in swedencentral/eastus/francecentral/
+# westeurope/northeurope -- not consumed by another deployment, just
+# never granted); DataZoneStandard has the full 1000 units free in the
+# same regions, so that's what's used here instead -- same model/
+# capacity, EU-geography-scoped routing instead of global.
 resource "azurerm_cognitive_deployment" "agent_model" {
   name                 = "gpt-5.4-mini"
   cognitive_account_id = azurerm_cognitive_account.foundry.id
@@ -560,7 +564,7 @@ resource "azurerm_cognitive_deployment" "agent_model" {
   }
 
   sku {
-    name     = "GlobalStandard"
+    name     = "DataZoneStandard"
     capacity = 1000
   }
 }
