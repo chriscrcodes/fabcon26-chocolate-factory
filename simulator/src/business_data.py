@@ -1,4 +1,4 @@
-"""Generates the Supply Chain + ERP/Orders seed CSVs (9 tables) for the
+"""Generates the Supply Chain + ERP/Orders seed CSVs (10 tables) for the
 chocolate scenario -- the two domains the medallion-layers design memo
 puts on a Fabric SQL Database plane rather than the Eventhouse, since
 they're batch/transactional business data, not streaming telemetry.
@@ -123,6 +123,55 @@ def build_inventory(materials: list[dict]) -> list[dict]:
                 }
             )
     return inventory
+
+
+def build_batch_material_usage(materials: list[dict]) -> list[dict]:
+    # Closes the "which supplier fed this specific batch" traceability
+    # gap (see README.md's Known limitations / SETUP.md's fabric/ontology
+    # section) -- a batch_material_usage junction table, same shape as
+    # order_line, since a batch consumes several material types per
+    # recipe and one material lot can feed many batches.
+    #
+    # BatchId values are synthetic (matching the simulator's own
+    # BATCH-<line>-<timestamp>-<uuid> shape) rather than literal live
+    # streamed BatchIds -- same one-time-seed caveat build_shipments()
+    # already carries, not wired to the running simulator's actual batch
+    # stream. Recipe percentages (RCP-DARK70/MILK35/WHITE, see
+    # recipe.csv) decide which material types a batch actually needs --
+    # e.g. RCP-WHITE has 0% cacao, so it never consumes Cocoa Nibs --
+    # rather than picking material types at random, so lot-traceability
+    # answers look like a real recipe, not noise.
+    recipe_material_types = {
+        "RCP-DARK70": ["Cocoa Nibs", "Sugar", "Packaging"],
+        "RCP-MILK35": ["Cocoa Nibs", "Milk", "Sugar", "Packaging"],
+        "RCP-WHITE": ["Milk", "Sugar", "Packaging"],
+    }
+    materials_by_type: dict[str, list[dict]] = {}
+    for material in materials:
+        materials_by_type.setdefault(material["Type"], []).append(material)
+
+    usage = []
+    for i in range(60):
+        factory_id = random.choice(FACTORY_IDS)
+        line_id = f"{factory_id}-L{random.randint(1, 3)}"
+        started = TODAY - timedelta(days=random.randint(0, 60))
+        # Date-based, not a real Unix timestamp (date has no time
+        # component, and %s isn't portable across platforms) -- still
+        # matches the simulator's BATCH-<line>-<numeric>-<uuid> shape.
+        batch_id = f"BATCH-{line_id}-{started.strftime('%Y%m%d')}-{uuid.uuid4().hex[:4]}"
+        recipe_id = random.choice(RECIPE_IDS)
+
+        for material_type in recipe_material_types[recipe_id]:
+            lot = random.choice(materials_by_type[material_type])
+            usage.append(
+                {
+                    "UsageId": f"USE-{i:04d}-{material_type.replace(' ', '')[:4].upper()}",
+                    "BatchId": batch_id,
+                    "MaterialId": lot["MaterialId"],
+                    "QuantityKg": round(random.uniform(20, 400), 1),
+                }
+            )
+    return usage
 
 
 def build_shipments() -> list[dict]:
@@ -261,6 +310,7 @@ def main() -> None:
     suppliers = build_suppliers()
     materials = build_materials(suppliers)
     inventory = build_inventory(materials)
+    batch_material_usage = build_batch_material_usage(materials)
     shipments = build_shipments()
     customers = build_customers()
     products = build_products()
@@ -269,6 +319,7 @@ def main() -> None:
     write_csv(tables_dir / "supplier.csv", suppliers)
     write_csv(tables_dir / "material.csv", materials)
     write_csv(tables_dir / "inventory.csv", inventory)
+    write_csv(tables_dir / "batch_material_usage.csv", batch_material_usage)
     write_csv(tables_dir / "shipment.csv", shipments)
     write_csv(tables_dir / "customer.csv", customers)
     write_csv(tables_dir / "product.csv", products)

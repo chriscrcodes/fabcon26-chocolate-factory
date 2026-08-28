@@ -38,6 +38,17 @@ CREATE TABLE inventory (
 )
 GO
 
+CREATE TABLE batch_material_usage (
+    UsageId NVARCHAR(50) NOT NULL PRIMARY KEY,
+    -- Loose reference to the Eventhouse's silver_batch -- cross-engine,
+    -- not enforced with a real FK, same reasoning as shipment.BatchId
+    -- below.
+    BatchId NVARCHAR(100) NOT NULL,
+    MaterialId NVARCHAR(50) NOT NULL REFERENCES material(MaterialId),
+    QuantityKg FLOAT NOT NULL
+)
+GO
+
 CREATE TABLE shipment (
     ShipmentId NVARCHAR(50) NOT NULL PRIMARY KEY,
     FromFactoryId NVARCHAR(50) NOT NULL,

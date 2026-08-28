@@ -30,8 +30,8 @@ picks the right tool per question — and cites it.
 Nothing here is a mockup. Every box in the diagrams below is real,
 deployed infrastructure, provisioned by one `terraform apply`.
 
-**4** factories · **10** production lines · **22** ontology entities ·
-**27** bound relationships · **3** agent tools · **1** `terraform apply`
+**4** factories · **10** production lines · **23** ontology entities ·
+**29** bound relationships · **3** agent tools · **1** `terraform apply`
 
 ## 🏭 What it is
 
@@ -41,8 +41,9 @@ deployed infrastructure, provisioned by one `terraform apply`.
 - **A full medallion architecture** on Fabric Real-Time Intelligence
   (Eventhouse Bronze → Silver → Gold)
 - **A Fabric IQ Ontology** binding that telemetry together with Supply
-  Chain/ERP data into one queryable graph — 22 entity types, 27 real
-  bound relationships
+  Chain/ERP data into one queryable graph — 23 entity types, 29 real
+  bound relationships, including a `batch_material_usage` junction
+  table for lot-level material/supplier traceability
 - **A Foundry IQ knowledge base** grounding policy/definition questions
   a schema alone can't answer
 - **One Foundry Agent Service agent**, `chocolate-factory-agent`,
@@ -58,7 +59,7 @@ flowchart LR
     SIM["simulator"] -->|Event Hub| ES["Eventstream"]
     ES --> EH["Eventhouse\nBronze / Silver / Gold KQL"]
     SQL["Fabric SQL Database\nSupply Chain / ERP"] --> ONT
-    EH -->|OneLake mirroring| ONT["Fabric IQ Ontology\n22 entities, 27 relationships"]
+    EH -->|OneLake mirroring| ONT["Fabric IQ Ontology\n23 entities, 29 relationships"]
     KB["foundry/kb/*.md"] -->|Azure AI Search| FKB["Foundry IQ\nknowledge base"]
     EH -->|Fabric Data Agent| AGENT["chocolate-factory-agent\n(Foundry Agent Service)"]
     ONT --> AGENT
@@ -81,7 +82,7 @@ flowchart TB
     end
 
     subgraph FABRIC["Microsoft Fabric"]
-        subgraph ONTOLOGY["Fabric IQ Ontology -- 22 entities, 27 relationships"]
+        subgraph ONTOLOGY["Fabric IQ Ontology -- 23 entities, 29 relationships"]
             direction LR
             FQ["Factory & Quality\nfactory, line, batch,\nsensor_reading, quality_check"]
             SC["Supply Chain\nsupplier, material,\ninventory, shipment"]
@@ -124,7 +125,7 @@ let answers from different domains join together:
 | Domain | Owns | Notes |
 |---|---|---|
 | **Factory / Quality** | `factory`, `production_line`, `production_stage`, `batch`, `sensor_reading`, `quality_check`, `line_status` | Streamed telemetry — see [`CHOCOLATE-FACTORY.md`](CHOCOLATE-FACTORY.md) for the process it represents |
-| **Supply Chain** | `supplier`, `material`, `inventory`, `shipment` | Batch-loaded, Fabric SQL Database |
+| **Supply Chain** | `supplier`, `material`, `inventory`, `batch_material_usage`, `shipment` | Batch-loaded, Fabric SQL Database |
 | **ERP / Orders** | `customer`, `product`, `sales_order`, `order_line`, `invoice` | Batch-loaded, Fabric SQL Database |
 
 Cross-domain relationships (all real, bound in the Fabric IQ Ontology
@@ -140,6 +141,8 @@ sensor_reading.BatchId       -> batch.BatchId
 quality_check.BatchId        -> batch.BatchId
 line_status.LineId           -> production_line.LineId
 material.SupplierId          -> supplier.SupplierId
+batch_material_usage.BatchId    -> batch.BatchId
+batch_material_usage.MaterialId -> material.MaterialId
 inventory.MaterialId         -> material.MaterialId
 inventory.FactoryId          -> factory.FactoryId
 shipment.FromFactoryId       -> factory.FactoryId
@@ -171,7 +174,7 @@ the stack:
 | Objective | Where it lives |
 |---|---|
 | Fabric grounding enterprise data | Eventhouse (live telemetry) + Fabric SQL Database (Supply Chain/ERP) + Foundry IQ knowledge base, all queried live, not mocked |
-| Fabric IQ for context-aware reasoning | The Fabric IQ Ontology — 22 entity types, 27 real bound relationships spanning both engines |
+| Fabric IQ for context-aware reasoning | The Fabric IQ Ontology — 23 entity types, 29 real bound relationships spanning both engines |
 | Orchestrate AI workflows using Foundry | One Foundry Agent Service agent, 3 tools, picking the right one per question and citing it |
 | Multi-agent architectures combining data and AI agents | See "What we tried and didn't make the cut" below — this is where the talk earns its "in Action" credibility rather than a polished happy path |
 
@@ -233,6 +236,20 @@ This demo also tried the more literal interpretation via Foundry's
 protocol and auth model work, the product's own tool-invocation layer
 for it doesn't yet.
 
+### If asked live
+
+Two things worth having an honest one-liner ready for, rather than being
+caught off guard:
+
+- **Scale is demo-scale, not enterprise-scale, on purpose.** 4
+  factories, 10 lines, 9 suppliers — real enough to exercise every
+  part of the architecture live, not a claim about production volume.
+- **Fresh-turn pronoun references don't resolve** (*"who supplies
+  **this** product?"*) — a known, acknowledged model behavior, not a
+  bug in this demo specifically; ask with a concrete noun instead. See
+  [`SETUP.md`'s question bank](SETUP.md#known-to-fail--useful-for-the-honesty-beat-not-the-main-script)
+  for the exact failure.
+
 ## ✅ Verified, not asserted
 
 Every question in the [full question bank](SETUP.md#the-full-verified-question-bank)
@@ -253,15 +270,23 @@ failures, kept in the docs instead of quietly dropped.
 Stated plainly, not hidden:
 
 - The Fabric Data Agent only grounds Factory/Quality telemetry — a
-  second Lakehouse-backed source for Supply Chain/ERP was tried and
-  doesn't work as of this writing (see
-  [`SETUP.md`'s `fabric/data-agent` section](SETUP.md#fabricdata-agent));
-  Supply Chain/ERP grounding comes from the Ontology tool instead.
-- No `recipe`/`batch` → `material`/`supplier` relationship exists in
-  the Ontology — it can answer "who are our suppliers" but not
-  genuine lot-level traceability ("which supplier fed this specific
-  batch"). A real data gap, not a config issue: that data was never
-  generated on either the simulator or seed-data side.
+  second Lakehouse-backed source for Supply Chain/ERP is enum-blocked
+  (no `sql_database` source type exists at all) and its Lakehouse-table
+  alternative failed identically across 5 configurations, including an
+  exact reproduction of what the Fabric portal's own picker generates
+  — reproduced in the **portal's own native chat**, which rules out a
+  config mistake on our end (see
+  [`SETUP.md`'s `fabric/data-agent` section](SETUP.md#fabricdata-agent)).
+  Confirmed dead end, not lack of effort; Supply Chain/ERP grounding
+  comes from the Ontology tool instead, which already covers it fully.
+- `fabric_data_agent` and `fabric_iq_ontology` can legitimately give
+  different answers to an overlapping question (e.g. "how many quality
+  checks failed today") — the Data Agent queries the live Eventhouse
+  directly, while the Ontology reads a periodically-materialized copy
+  (`materialize_static_sources.py`, refreshed on every `terraform
+  apply`, not continuously). Architectural, not a bug — see
+  [`SETUP.md`'s "A correctly-shaped definition is not enough"](SETUP.md#fabricontology)
+  for the mechanism.
 - The Operations Agent needs one manual portal step after `terraform
   apply` to connect its alert action — see
   [`SETUP.md`'s Operations Agent section](SETUP.md#7-one-time-manual-step-operations-agent).

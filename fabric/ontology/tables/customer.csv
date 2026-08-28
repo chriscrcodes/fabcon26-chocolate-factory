@@ -1,13 +1,13 @@
 CustomerId,Name,Country,Segment,CreditLimit
-CUST-7EC56DA0,Nordic Confectionery Group,Sweden,FoodService,10000
-CUST-7D9FEB9A,Iberia Retail Alliance,Spain,Wholesale,50000
-CUST-0AADF842,Great Lakes Foodservice,United States,Retail,10000
-CUST-AF4E465A,Pacific Rim Distributors,Singapore,Wholesale,50000
-CUST-3B7AF50F,Andes Gourmet Imports,Peru,FoodService,250000
-CUST-0FD13428,Sunset Boulevard Cafes,United States,Wholesale,50000
-CUST-BB502C75,Baltic Sweets Wholesale,Poland,Wholesale,50000
-CUST-8F72912C,Delta Direct-to-Door,Canada,DirectToConsumer,50000
-CUST-479A79C6,Highland Chocolatiers,Scotland,Retail,10000
-CUST-A6A3E65D,Meridian Hospitality Group,United Arab Emirates,DirectToConsumer,50000
-CUST-3A4ED2D4,Coastal Trade Partners,Portugal,Retail,10000
-CUST-5A1B9BE3,Riverside Specialty Foods,Australia,FoodService,25000
+CUST-7EC56DA0,Nordic Confectionery Group,Sweden,FoodService,250000
+CUST-7D9FEB9A,Iberia Retail Alliance,Spain,DirectToConsumer,100000
+CUST-0AADF842,Great Lakes Foodservice,United States,FoodService,25000
+CUST-AF4E465A,Pacific Rim Distributors,Singapore,Wholesale,250000
+CUST-3B7AF50F,Andes Gourmet Imports,Peru,DirectToConsumer,25000
+CUST-0FD13428,Sunset Boulevard Cafes,United States,DirectToConsumer,10000
+CUST-BB502C75,Baltic Sweets Wholesale,Poland,FoodService,100000
+CUST-8F72912C,Delta Direct-to-Door,Canada,DirectToConsumer,100000
+CUST-479A79C6,Highland Chocolatiers,Scotland,Wholesale,100000
+CUST-A6A3E65D,Meridian Hospitality Group,United Arab Emirates,Retail,25000
+CUST-3A4ED2D4,Coastal Trade Partners,Portugal,FoodService,10000
+CUST-5A1B9BE3,Riverside Specialty Foods,Australia,DirectToConsumer,10000

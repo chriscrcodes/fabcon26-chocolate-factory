@@ -14,8 +14,9 @@ ontology_config.json produces byte-identical output -- matching
 generate_rdf.py's determinism.
 
 All of Factory/Quality's 8 entities (`sensor_reading` realized as 6
-per-stage entities, see below) and all 9 Supply Chain/ERP entities are
-bound here. Two real constraints found live shape which source each
+per-stage entities, see below) and all 10 Supply Chain/ERP entities
+(including `batch_material_usage`, the lot-traceability junction table)
+are bound here. Two real constraints found live shape which source each
 uses:
 
 - `EventhouseTableDataBindingProperties` (`sourceType: KustoTable`) is
@@ -199,6 +200,7 @@ LAKEHOUSE_BINDINGS = {
     "supplier": "supplier",
     "material": "material",
     "inventory": "inventory",
+    "batch_material_usage": "batch_material_usage",
     "shipment": "shipment",
     "customer": "customer",
     "product": "product",
@@ -234,6 +236,7 @@ LIVE_COLUMNS = {
     "supplier": {"SupplierId": "String", "Name": "String", "Country": "String", "MaterialType": "String", "Rating": "Double"},
     "material": {"MaterialId": "String", "SupplierId": "String", "Type": "String", "LotNumber": "String", "ReceivedDate": "DateTime", "QuantityKg": "Double"},
     "inventory": {"InventoryId": "String", "FactoryId": "String", "MaterialId": "String", "QuantityOnHand": "Double", "ReorderLevel": "Double", "LastUpdated": "DateTime"},
+    "batch_material_usage": {"UsageId": "String", "BatchId": "String", "MaterialId": "String", "QuantityKg": "Double"},
     "shipment": {"ShipmentId": "String", "FromFactoryId": "String", "ToLocationId": "String", "BatchId": "String", "Carrier": "String", "DepartDate": "DateTime", "ArriveDate": "DateTime", "Status": "String"},
     "customer": {"CustomerId": "String", "Name": "String", "Country": "String", "Segment": "String", "CreditLimit": "BigInt"},
     "product": {"ProductId": "String", "Name": "String", "RecipeId": "String", "PackagingType": "String", "SKU": "String"},

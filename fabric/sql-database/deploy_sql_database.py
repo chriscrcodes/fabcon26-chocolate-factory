@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Deploy 01_tables.sql/02_gold.sql to the Fabric SQL Database and seed
-its 9 tables from fabric/ontology/tables/*.csv.
+its 10 tables from fabric/ontology/tables/*.csv.
 
 Uses python-tds (pure-Python TDS protocol client) rather than pyodbc --
 avoids needing the msodbcsql18 native ODBC driver installed on whatever
@@ -32,10 +32,11 @@ from azure.identity import AzureCliCredential
 HERE = Path(__file__).parent
 TABLES_DIR = HERE / ".." / "ontology" / "tables"
 
-# Load order respects FK dependencies (supplier -> material -> inventory;
-# customer/product -> sales_order -> order_line/invoice).
+# Load order respects FK dependencies (supplier -> material ->
+# inventory/batch_material_usage; customer/product -> sales_order ->
+# order_line/invoice).
 SEED_TABLES = [
-    "supplier", "material", "inventory", "shipment",
+    "supplier", "material", "inventory", "batch_material_usage", "shipment",
     "customer", "product", "sales_order", "order_line", "invoice",
 ]
 

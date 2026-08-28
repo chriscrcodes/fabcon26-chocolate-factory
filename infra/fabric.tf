@@ -842,7 +842,7 @@ output "FABRIC_SQL_DATABASE_NAME" {
 # for this data shape, not a configuration mistake -- see
 # SETUP.md's foundry/agents section for the full sequence tried. Supply
 # Chain/ERP grounding for the Foundry agent comes from the Ontology
-# (already covers all 9 tables with 27 real relationships) instead.
+# (already covers all 10 tables with 29 real relationships) instead.
 # ---------------------------------------------------------------------
 
 resource "fabric_data_agent" "business" {

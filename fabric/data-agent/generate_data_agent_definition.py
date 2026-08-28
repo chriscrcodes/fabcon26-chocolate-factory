@@ -25,7 +25,7 @@ already can't get Ontology relationship instances for the same reason.
 
 This data agent is Eventhouse-only. It was originally also going to
 cover Supply Chain/ERP via a second, Lakehouse-backed data source
-(reusing the dimension Lakehouse's mirror of those 9 tables, built for
+(reusing the dimension Lakehouse's mirror of those tables, built for
 the Ontology), avoiding a separate data agent per domain. That path is
 abandoned -- five configurations were tried live, including an exact
 reproduction of a config built through the Fabric portal's own
@@ -38,7 +38,7 @@ Agent + Lakehouse Tables for this data shape, not a configuration
 mistake -- see SETUP.md's fabric/data-agent section for the full sequence tried
 (kept there for anyone revisiting this once the underlying Fabric
 feature matures). Supply Chain/ERP grounding for the Foundry agent
-comes from the Fabric IQ Ontology (already covers all 9 tables with 27
+comes from the Fabric IQ Ontology (already covers all 10 tables with 29
 real relationships) instead.
 
 Element `id` fields are deterministic (uuid5 from a namespace + name),

@@ -8,7 +8,7 @@
     xmlns:ont="http://example.org/ontology/chocolate-factory/">
 
     <!-- Chocolate Factory -->
-    <!-- Four chocolate factories (Barcelona, Chicago, São Paulo, Singapore), each running 2-3 production lines through the in-factory stages of chocolate making (grinding through packaging), plus the supply chain and ERP data around them. Farm Preparation (harvest, fermentation, drying, roasting, winnowing) happens near cocoa origin, upstream of these factories - see farm-preparation.md - and is represented here only as incoming 'Cocoa Nibs' material from suppliers. -->
+    <!-- Four chocolate factories (Barcelona, Chicago, São Paulo, Singapore), each running 2-3 production lines through the in-factory stages of chocolate making (grinding through packaging), plus the supply chain and ERP data around them. Farm Preparation (harvest, fermentation, drying, roasting, winnowing) happens near cocoa origin, upstream of these factories - see ../../CHOCOLATE-FACTORY.md - and is represented here only as incoming 'Cocoa Nibs' material from suppliers. -->
 
     <!-- Classes -->
 
@@ -87,6 +87,13 @@
         <rdfs:comment>inventory</rdfs:comment>
         <ont:icon>🚚</ont:icon>
         <ont:color>#2F6E63</ont:color>
+    </owl:Class>
+
+    <owl:Class rdf:about="http://example.org/ontology/chocolate-factory/BatchMaterialUsage">
+        <rdfs:label>BatchMaterialUsage</rdfs:label>
+        <rdfs:comment>Junction table closing the batch -&gt; material/supplier lot-traceability gap -- which material lots (and so which suppliers) fed a specific batch. BatchId is a loose, cross-plane reference to the Eventhouse's batch, same as shipment.BatchId, not a real FK.</rdfs:comment>
+        <ont:icon>🏭</ont:icon>
+        <ont:color>#A5522A</ont:color>
     </owl:Class>
 
     <owl:Class rdf:about="http://example.org/ontology/chocolate-factory/Shipment">
@@ -612,6 +619,37 @@
         <ont:propertyType>datetime</ont:propertyType>
     </owl:DatatypeProperty>
 
+    <!-- Data Properties: BatchMaterialUsage -->
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/batch_material_usage_UsageId">
+        <rdfs:label>UsageId</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/BatchMaterialUsage"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+        <ont:isIdentifier rdf:datatype="http://www.w3.org/2001/XMLSchema#boolean">true</ont:isIdentifier>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/batch_material_usage_BatchId">
+        <rdfs:label>BatchId</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/BatchMaterialUsage"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/batch_material_usage_MaterialId">
+        <rdfs:label>MaterialId</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/BatchMaterialUsage"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/batch_material_usage_QuantityKg">
+        <rdfs:label>QuantityKg</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/BatchMaterialUsage"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#float"/>
+        <ont:propertyType>decimal</ont:propertyType>
+    </owl:DatatypeProperty>
+
     <!-- Data Properties: Shipment -->
 
     <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/shipment_ShipmentId">
@@ -1025,6 +1063,26 @@
         <ont:cardinality>many-to-one</ont:cardinality>
         <ont:fromEntityId>Shipment</ont:fromEntityId>
         <ont:toEntityId>Batch</ont:toEntityId>
+    </owl:ObjectProperty>
+
+    <owl:ObjectProperty rdf:about="http://example.org/ontology/chocolate-factory/usage_to_batch">
+        <rdfs:label>usage_to_batch</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/BatchMaterialUsage"/>
+        <rdfs:range rdf:resource="http://example.org/ontology/chocolate-factory/Batch"/>
+        <rdfs:comment>BatchId -&gt; BatchId</rdfs:comment>
+        <ont:cardinality>many-to-one</ont:cardinality>
+        <ont:fromEntityId>BatchMaterialUsage</ont:fromEntityId>
+        <ont:toEntityId>Batch</ont:toEntityId>
+    </owl:ObjectProperty>
+
+    <owl:ObjectProperty rdf:about="http://example.org/ontology/chocolate-factory/usage_to_material">
+        <rdfs:label>usage_to_material</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/BatchMaterialUsage"/>
+        <rdfs:range rdf:resource="http://example.org/ontology/chocolate-factory/Material"/>
+        <rdfs:comment>MaterialId -&gt; MaterialId</rdfs:comment>
+        <ont:cardinality>many-to-one</ont:cardinality>
+        <ont:fromEntityId>BatchMaterialUsage</ont:fromEntityId>
+        <ont:toEntityId>Material</ont:toEntityId>
     </owl:ObjectProperty>
 
     <owl:ObjectProperty rdf:about="http://example.org/ontology/chocolate-factory/product_to_recipe">

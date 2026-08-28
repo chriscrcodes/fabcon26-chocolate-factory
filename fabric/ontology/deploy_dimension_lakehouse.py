@@ -7,8 +7,9 @@ LakehouseTableDataBindingProperties. This covers two groups:
   production_stage, recipe) -- Eventhouse bindings are TimeSeries-only
   (verified live), so these genuinely static tables can't be bound
   directly from the KQL database.
-- Supply Chain/ERP's tables (supplier, material, inventory, shipment,
-  customer, product, sales_order, order_line, invoice) -- the Ontology
+- Supply Chain/ERP's tables (supplier, material, inventory,
+  batch_material_usage, shipment, customer, product, sales_order,
+  order_line, invoice) -- the Ontology
   definition schema has exactly two sourceType options, LakehouseTable
   and KustoTable (Eventhouse, TimeSeries-only); there is no
   SqlDatabaseTable/WarehouseTable type (checked against
@@ -53,6 +54,7 @@ TABLE_GROUPS = {
         "supplier",
         "material",
         "inventory",
+        "batch_material_usage",
         "shipment",
         "customer",
         "product",

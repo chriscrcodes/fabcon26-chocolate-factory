@@ -148,6 +148,18 @@
       "key": "InventoryId",
       "source_table": "inventory"
     },
+    "batch_material_usage": {
+      "columns": ["UsageId", "BatchId", "MaterialId", "QuantityKg"],
+      "types": {
+        "UsageId": "String",
+        "BatchId": "String",
+        "MaterialId": "String",
+        "QuantityKg": "Float"
+      },
+      "key": "UsageId",
+      "source_table": "batch_material_usage",
+      "notes": "Junction table closing the batch -> material/supplier lot-traceability gap -- which material lots (and so which suppliers) fed a specific batch. BatchId is a loose, cross-plane reference to the Eventhouse's batch, same as shipment.BatchId, not a real FK."
+    },
     "shipment": {
       "columns": ["ShipmentId", "FromFactoryId", "ToLocationId", "BatchId", "Carrier", "DepartDate", "ArriveDate", "Status"],
       "types": {
@@ -242,6 +254,8 @@
     { "name": "inventory_to_factory", "from": "inventory", "to": "factory", "fromKey": "FactoryId", "toKey": "FactoryId" },
     { "name": "shipment_to_factory", "from": "shipment", "to": "factory", "fromKey": "FromFactoryId", "toKey": "FactoryId" },
     { "name": "shipment_to_batch", "from": "shipment", "to": "batch", "fromKey": "BatchId", "toKey": "BatchId" },
+    { "name": "usage_to_batch", "from": "batch_material_usage", "to": "batch", "fromKey": "BatchId", "toKey": "BatchId" },
+    { "name": "usage_to_material", "from": "batch_material_usage", "to": "material", "fromKey": "MaterialId", "toKey": "MaterialId" },
     { "name": "product_to_recipe", "from": "product", "to": "recipe", "fromKey": "RecipeId", "toKey": "RecipeId" },
     { "name": "order_to_customer", "from": "sales_order", "to": "customer", "fromKey": "CustomerId", "toKey": "CustomerId" },
     { "name": "orderline_to_order", "from": "order_line", "to": "sales_order", "fromKey": "OrderId", "toKey": "OrderId" },

@@ -1023,7 +1023,7 @@ python generate_rdf.py          # regenerate chocolate.rdf after editing the con
 ```
 
 Then on the Playground: Import/Export → Import → pick `chocolate.rdf`.
-All 17 classes and 19 relationships should appear on the canvas,
+All 18 classes and 22 relationships should appear on the canvas,
 grouped loosely by domain via each class's icon/color (🏭
 Factory/Quality, 🚚 Supply Chain, 🧾 ERP/Orders).
 
@@ -1039,10 +1039,11 @@ to the live Eventhouse and a small dimension Lakehouse:
   Lakehouse "Load Table" API) — Factory/Quality's dimension entities
   (`factory`, `production_line`, `production_stage`, `recipe`) bind
   here rather than the Eventhouse, since Eventhouse bindings are
-  TimeSeries-only, and all 9 Supply Chain/ERP tables (`supplier`,
-  `material`, `inventory`, `shipment`, `customer`, `product`,
-  `sales_order`, `order_line`, `invoice`) are mirrored into the same
-  Lakehouse for the same reason — the Ontology definition schema has
+  TimeSeries-only, and all 10 Supply Chain/ERP tables (`supplier`,
+  `material`, `inventory`, `batch_material_usage`, `shipment`,
+  `customer`, `product`, `sales_order`, `order_line`, `invoice`) are
+  mirrored into the same Lakehouse for the same reason — the Ontology
+  definition schema has
   no `SqlDatabaseTable`/`WarehouseTable` sourceType, only
   `LakehouseTable` and `KustoTable` (Eventhouse, TimeSeries-only). The
   Fabric SQL Database (`fabric/sql-database/`) stays the actual
@@ -1072,18 +1073,23 @@ to the live Eventhouse and a small dimension Lakehouse:
 All four are wired into `infra/fabric.tf` as `null_resource`s and run
 automatically on `terraform apply`.
 
-**All 22 entities are bound**: every Factory/Quality entity (`batch`,
+**All 23 entities are bound**: every Factory/Quality entity (`batch`,
 `quality_check`, `line_status`, the 4 dimension tables, and
 `sensor_reading` realized as 6 per-stage entities — see
 `generate_fabric_iq_definition.py`'s docstring for why a single
 EAV-shaped entity isn't possible and how the per-stage split works)
-plus all 9 Supply Chain/ERP entities. 27 of the 29 relationship types
-have real Contextualization instances, including the cross-domain
-`shipment_to_batch` link — only `batch_to_line` and `batch_to_recipe`
-stay type-only, since `silver_batch` is a materialized view and
-doesn't support the OneLake mirroring policy command (see
-`fabric/eventhouse`'s "Verified against a live tenant" section
-above).
+plus all 10 Supply Chain/ERP entities, including
+`batch_material_usage` — a junction table closing the batch →
+material/supplier lot-traceability gap (see "Known limitations" in
+`README.md`: given a batch, which material lots — and so which
+suppliers — fed it). 29 of the 31 relationship types have real
+Contextualization instances, including the cross-domain
+`shipment_to_batch` link and the two new `usage_to_batch`/
+`usage_to_material` relationships — only `batch_to_line` and
+`batch_to_recipe` stay type-only, since `silver_batch` is a
+materialized view and doesn't support the OneLake mirroring policy
+command (see `fabric/eventhouse`'s "Verified against a live tenant"
+section above).
 
 **A correctly-shaped definition is not enough — every TimeSeries
 entity also needs a static binding, which this generator didn't emit
@@ -1163,7 +1169,7 @@ that a specific entity actually has data — check that entity's own
 type details too.
 
 **Separately, still an open question, not yet re-tested against the
-now-working graph:** 16 of the 27 relationship Contextualizations
+now-working graph:** 16 of the 29 relationship Contextualizations
 bind through the OneLake-mirror *shortcuts* (`quality_check`,
 `line_status`, all 6 `sensor_reading_<stage>`), the same "external
 table" pattern the docs say isn't supported for bindings in general.
@@ -1199,18 +1205,23 @@ See [`CHOCOLATE-FACTORY.md`](CHOCOLATE-FACTORY.md).
 Supply Chain + ERP/Orders tables for the chocolate factory Fabric SQL
 Database — the batch/transactional plane, as opposed to
 `fabric/eventhouse`'s streaming Factory/Quality telemetry (see the
-"Two data planes" design above). 9 tables across the two domains,
+"Two data planes" design above). 10 tables across the two domains,
 plus 3 Gold views.
 
-- `01_tables.sql` — the 9 tables (`supplier`, `material`, `inventory`,
-  `shipment`, `customer`, `product`, `sales_order`, `order_line`,
-  `invoice`), matching `fabric/ontology/ontology_config.json`
-  column-for-column.
+- `01_tables.sql` — the 10 tables (`supplier`, `material`, `inventory`,
+  `batch_material_usage`, `shipment`, `customer`, `product`,
+  `sales_order`, `order_line`, `invoice`), matching
+  `fabric/ontology/ontology_config.json` column-for-column.
+  `batch_material_usage` is the batch → material/supplier
+  lot-traceability junction table (a batch consumes several material
+  types per recipe; one material lot can feed many batches) — same
+  loose, unenforced cross-plane `BatchId` reference `shipment` already
+  uses.
 - `02_gold.sql` — `gold_inventory_position` (stockout-risk flag per
   factory/material), `gold_supplier_scorecard` (rating + volume per
   supplier), `gold_order_fulfillment_kpi` (payment status per order —
   `NotInvoiced`/`Outstanding`/`Overdue`/`Paid`).
-- `deploy_sql_database.py` — deploys both files and seeds the 9
+- `deploy_sql_database.py` — deploys both files and seeds the 10
   tables from `fabric/ontology/tables/*.csv` (written by
   `simulator/run_business_seed.py`). Uses
   [python-tds](https://python-tds.readthedocs.io/) (pure-Python TDS
@@ -1218,10 +1229,28 @@ plus 3 Gold views.
   installing on the machine running `terraform apply` — same
   reasoning as every other script in this repo staying pure-Python.
   Auth is an Azure AD access token (`AzureCliCredential`, scope
-  `https://database.windows.net/.default`).
+  `https://database.windows.net/.default`). Seeding is
+  skip-if-already-populated per table (`seed_table()`), never an
+  update/overwrite of existing rows.
+- `clear_business_tables.py` — clears `invoice`/`order_line`/
+  `sales_order`/`customer`/`batch_material_usage`/`inventory`/
+  `shipment`/`material` (FK-safe order) so the next `terraform apply`
+  actually reseeds them. **Needed whenever `fabric/ontology/tables/*.csv`'s
+  content changes** (e.g. a new `business_data.py` generator function
+  reseeding the shared random stream, as happened adding
+  `batch_material_usage`) — `deploy_dimension_lakehouse.py` always
+  overwrites on its next run (retriggered by the CSV file-hash), but
+  `deploy_sql_database.py` silently skips already-populated tables, so
+  without this the SQL Database (the system of record) and the
+  dimension Lakehouse (what the Ontology actually reads) go quietly
+  inconsistent with each other. `supplier`/`product` are never
+  affected — neither's generator consumes randomness after any other
+  table's, so their CSV content never shifts from a change elsewhere.
 
 `infra/fabric.tf` provisions the empty `fabric_sql_database` item and
-runs this script automatically via `null_resource.load_business_sql`.
+runs `deploy_sql_database.py` automatically via
+`null_resource.load_business_sql` — `clear_business_tables.py` is a
+manual, run-when-needed step, not wired into `terraform apply`.
 
 #### Verified against a live tenant
 
@@ -1321,7 +1350,7 @@ generated config fails in the portal's own chat, the gap is in Data
 Agent + Lakehouse Tables query execution for this data shape, not in
 anything authored here. Supply Chain/ERP grounding for the Foundry
 agent comes from the **Fabric IQ Ontology** instead (already covers
-all 9 tables with 27 real relationships, verified working
+all 10 tables with 29 real relationships, verified working
 independently of this issue).
 
 #### Testing it yourself
@@ -1405,7 +1434,7 @@ project connection (`infra/azure.tf`) rather than a bare `server_url`
   telemetry aggregates (e.g. "How many quality checks failed today?").
 - **`fabric_iq_ontology`** — connection `fabric-iq-ontology`, category
   `RemoteTool`, authType `UserEntraToken`. Answers structured
-  relationship questions across all 22 entity types (e.g. "What
+  relationship questions across all 23 entity types (e.g. "What
   entity types exist in the ontology?").
 
 The two Fabric tools needed `UserEntraToken` (forwards the calling

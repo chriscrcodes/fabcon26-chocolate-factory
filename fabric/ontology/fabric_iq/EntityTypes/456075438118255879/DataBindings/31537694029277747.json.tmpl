@@ -1,0 +1,30 @@
+{
+  "id": "31537694029277747",
+  "dataBindingConfiguration": {
+    "dataBindingType": "NonTimeSeries",
+    "propertyBindings": [
+      {
+        "sourceColumnName": "UsageId",
+        "targetPropertyId": "1035269960491915996"
+      },
+      {
+        "sourceColumnName": "BatchId",
+        "targetPropertyId": "123480755677462558"
+      },
+      {
+        "sourceColumnName": "MaterialId",
+        "targetPropertyId": "857629907420085571"
+      },
+      {
+        "sourceColumnName": "QuantityKg",
+        "targetPropertyId": "400778953478977042"
+      }
+    ],
+    "sourceTableProperties": {
+      "sourceType": "LakehouseTable",
+      "workspaceId": "{{ .WorkspaceId }}",
+      "itemId": "{{ .LakehouseId }}",
+      "sourceTableName": "batch_material_usage"
+    }
+  }
+}
