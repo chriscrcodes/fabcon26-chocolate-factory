@@ -1079,10 +1079,14 @@ automatically on `terraform apply`.
 `generate_fabric_iq_definition.py`'s docstring for why a single
 EAV-shaped entity isn't possible and how the per-stage split works)
 plus all 10 Supply Chain/ERP entities, including
-`batch_material_usage` — a junction table closing the batch →
-material/supplier lot-traceability gap (see "Known limitations" in
-`README.md`: given a batch, which material lots — and so which
-suppliers — fed it). 29 of the 31 relationship types have real
+`batch_material_usage` — a junction table for "which material lot and
+supplier does this usage record cover" (verified live via
+`usage_to_material` → `material_to_supplier`). Confirmed live it does
+**not** close full batch-level traceability — `usage_to_batch` returns
+nothing, since its `BatchId` values are synthetic (same convention
+`shipment.BatchId` already uses) and never overlap with the live
+`Batch` entity's own streamed IDs. See "Known limitations" in
+`README.md` for the precise claim. 29 of the 31 relationship types have real
 Contextualization instances, including the cross-domain
 `shipment_to_batch` link and the two new `usage_to_batch`/
 `usage_to_material` relationships — only `batch_to_line` and
@@ -1233,9 +1237,11 @@ plus 3 Gold views.
   skip-if-already-populated per table (`seed_table()`), never an
   update/overwrite of existing rows.
 - `clear_business_tables.py` — clears `invoice`/`order_line`/
-  `sales_order`/`customer`/`batch_material_usage`/`inventory`/
-  `shipment`/`material` (FK-safe order) so the next `terraform apply`
-  actually reseeds them. **Needed whenever `fabric/ontology/tables/*.csv`'s
+  `sales_order`/`customer`/`inventory`/`shipment`/`material` (FK-safe
+  order) so the next `terraform apply` actually reseeds them.
+  `batch_material_usage` is deliberately excluded — it doesn't exist
+  until `terraform apply` creates it, so it always seeds fresh as a
+  new empty table regardless. **Needed whenever `fabric/ontology/tables/*.csv`'s
   content changes** (e.g. a new `business_data.py` generator function
   reseeding the shared random stream, as happened adding
   `batch_material_usage`) — `deploy_dimension_lakehouse.py` always

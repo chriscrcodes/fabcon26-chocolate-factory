@@ -40,13 +40,15 @@ import pytds
 from azure.identity import AzureCliCredential
 
 # Most-dependent first -- invoice/order_line/sales_order all trace back
-# to customer; inventory/batch_material_usage trace back to material.
+# to customer; inventory traces back to material. batch_material_usage
+# is intentionally NOT here -- it's a brand new table that doesn't
+# exist until the next `terraform apply` creates it, so there's
+# nothing to clear; it seeds normally as an empty table.
 TABLES_TO_CLEAR = [
     "invoice",
     "order_line",
     "sales_order",
     "customer",
-    "batch_material_usage",
     "inventory",
     "shipment",
     "material",

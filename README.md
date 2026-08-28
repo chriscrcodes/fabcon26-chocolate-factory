@@ -43,7 +43,8 @@ deployed infrastructure, provisioned by one `terraform apply`.
 - **A Fabric IQ Ontology** binding that telemetry together with Supply
   Chain/ERP data into one queryable graph — 23 entity types, 29 real
   bound relationships, including a `batch_material_usage` junction
-  table for lot-level material/supplier traceability
+  table answering "which supplier/material lots does this usage
+  record cover" (verified live)
 - **A Foundry IQ knowledge base** grounding policy/definition questions
   a schema alone can't answer
 - **One Foundry Agent Service agent**, `chocolate-factory-agent`,
@@ -290,6 +291,17 @@ Stated plainly, not hidden:
 - The Operations Agent needs one manual portal step after `terraform
   apply` to connect its alert action — see
   [`SETUP.md`'s Operations Agent section](SETUP.md#7-one-time-manual-step-operations-agent).
+- `batch_material_usage`'s traceability is real but partial, confirmed
+  live: `usage_to_material` → `material_to_supplier` correctly answers
+  "which material lot and supplier does this usage record cover" (a
+  real `USE-####` ID returns the exact right material and supplier
+  every time). `usage_to_batch` returns nothing, because its `BatchId`
+  values are synthetic-but-plausible (same accepted convention
+  `shipment.BatchId` already uses), generated in a separate seed run
+  from the live-streamed `Batch` entity's own IDs — the two ID spaces
+  never overlap by construction. So this answers "who supplies our
+  materials, per usage record," not "which supplier fed *this specific
+  live batch*."
 - Two things stay outside Terraform's reach on a fresh deploy: Fabric
   IQ's region availability, and Fabric workspace access for anyone who
   isn't the person who ran `terraform apply` — see
