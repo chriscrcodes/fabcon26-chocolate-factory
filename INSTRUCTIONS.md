@@ -101,15 +101,48 @@ events over 2 minutes with no connection errors. Add `--max-runtime
 120` to auto-stop, or Ctrl+C. Start this ~2 minutes before going live
 — let the room see numbers moving before any slide changes.
 
-### Backfilling history
+### Day-before prep — backfilling history
 
 A fresh environment has no multi-day history, which the Gold layer's
 daily-bucketed views (`gold_defect_rate_by_stage_daily`,
-`gold_factory_oee_daily`) need. Run once, before rehearsing queries
-that depend on trends:
+`gold_factory_oee_daily`) need. Run this the day before a session (or
+any time you want fresh trend data):
 
 ```bash
-uv run --env-file .env run_simulator.py --backfill-hours 48 --interval 30
+cd simulator
+./prepare_demo_data.sh          # 30 days ending now, the default
+./prepare_demo_data.sh 14       # or any other window, in days
+```
+
+One command does the full sequence: resumes the Fabric capacity if
+it's paused, **clears any previously streamed telemetry first**
+(`fabric/eventhouse/clear_telemetry.py`) so re-running this never
+double-counts an earlier backfill, streams the requested window
+(`--interval 300 --backfill-batch-ticks 100` under the hood — fast:
+a 30-day window takes roughly 3-4 minutes), then waits for ingestion
+to settle and verifies the result
+(`fabric/eventhouse/verify_telemetry.py` — row counts, daily density,
+a duplicate-`ReadingId` check). Requires `az login` as an identity
+with Fabric + Event Hub access, and reads connection details straight
+from `terraform output` in `infra/`, so `terraform apply` must have
+already succeeded.
+
+**Why clearing first matters:** `bronze_sensor_reading`,
+`bronze_quality_check`, and `bronze_line_status` use queued ingestion
+(streaming ingestion is disabled on them for Silver's update-policy
+joins), which can take a few minutes to land — a naive re-run of
+`--backfill-hours` without clearing first will layer a second,
+independently-sampled dataset on top of the first for any overlapping
+time window, silently doubling event density and skewing daily
+aggregations. `prepare_demo_data.sh` avoids this by construction;
+running the lower-level `run_simulator.py --backfill-hours` command
+directly (below) does not.
+
+Lower-level, manual equivalent if you want more control over a single
+step:
+
+```bash
+uv run --env-file .env run_simulator.py --backfill-hours 48 --interval 30 --backfill-batch-ticks 100
 ```
 
 Virtual clock, no wall-clock sleep — 48h at 30s/tick is 5760 ticks,

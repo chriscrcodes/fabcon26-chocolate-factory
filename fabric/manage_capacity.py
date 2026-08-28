@@ -45,9 +45,19 @@ def main() -> None:
     session = requests.Session()
     session.headers["Authorization"] = f"Bearer {get_token()}"
 
+    target_state = "Active" if action == "resume" else "Paused"
+    state_resp = session.get(f"https://management.azure.com{capacity_id}", params={"api-version": API_VERSION})
+    state_resp.raise_for_status()
+    current_state = state_resp.json().get("properties", {}).get("state")
+    if current_state == target_state:
+        print(f"{capacity_name} is already {current_state}")
+        return
+
     print(f"{sys.argv[1]}ing {capacity_name}...")
-    # This endpoint 411s on a POST with no body at all (no Content-Length
-    # header) -- an explicit empty JSON body forces `requests` to send one.
+    # This endpoint 400s ("Service is not ready to be updated") if the
+    # capacity is already in the target state -- checked above -- and
+    # 411s on a POST with no body at all (no Content-Length header) --
+    # an explicit empty JSON body forces `requests` to send one.
     resp = session.post(
         f"https://management.azure.com{capacity_id}/{action}", params={"api-version": API_VERSION}, json={}
     )
