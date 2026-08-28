@@ -51,13 +51,25 @@ them one apply at a time:
   `GlobalStandard`, since `GlobalStandard` quota for this model can be
   0 in a given subscription/region regardless of other deployments
   already running elsewhere in the same subscription.
-- **Fabric IQ (Ontology) enabled at the tenant level.** The Ontology
-  item this config creates requires a Fabric Admin Portal tenant
-  setting for Fabric IQ / Ontology (preview) to be turned on —
-  separate from general Fabric licensing above.
-  `null_resource.deploy_ontology` fails with `FeatureNotAvailable` if
-  it isn't (visible in the script's own error output as an HTTP 403
-  with `errorCode: FeatureNotAvailable`).
+- **Fabric IQ (Ontology) enabled at the tenant level.** A Fabric Admin
+  must enable **"Users can create Ontology (preview) items"** in the
+  Fabric Admin Portal (Admin Portal → Tenant settings), separate from
+  general Fabric licensing above — without it,
+  `null_resource.deploy_ontology` fails outright with
+  `FeatureNotAvailable` (an HTTP 403 with `errorCode:
+  FeatureNotAvailable` in the script's own error output). This is the
+  only tenant setting Microsoft's own docs list as required
+  ([Ontology (Preview) Required Tenant Settings](https://learn.microsoft.com/en-us/fabric/iq/ontology/overview-tenant-settings));
+  an earlier version of this doc speculated that two more
+  specifically-named settings ("Users can create Graph", "Users can
+  create and share data agent item types") were also required, based
+  on an in-product warning banner — a side-by-side diff of two
+  tenants' full settings lists found neither setting listed anywhere
+  in either tenant, and the real cause turned out to be unrelated (see
+  the `fabric/ontology` section's "A correctly-deployed definition
+  still needs a static binding" below). Don't chase that banner's
+  exact wording as a tenant setting; it doesn't correspond to anything
+  in the admin portal's actual settings list.
 - **A CA bundle that trusts your org's TLS-inspecting proxy, if any**
   (e.g. Zscaler). Several `local-exec` provisioners (`load_kql`,
   `load_dimension_tables`, `load_kb_files`, `deploy_ontology`, and
@@ -1045,6 +1057,12 @@ to the live Eventhouse and a small dimension Lakehouse:
   relationships whose "from" table is Eventhouse-bound get real
   Contextualization instances despite Eventhouse tables never being a
   valid Contextualization *source* directly.
+- `materialize_static_sources.py` copies `batch`, `quality_check`, and
+  `line_status` out of the Eventhouse into the dimension Lakehouse as
+  real, native (non-shortcut) Delta tables — the required static
+  binding source for those entities' TimeSeries data (see "A
+  correctly-shaped definition is not enough" below). Re-run on every
+  `terraform apply`, not once, unlike everything else here.
 - `deploy_fabric_iq_ontology.py` deploys the generated definition via
   direct Fabric REST calls (not the `fabric_ontology` Terraform
   resource — verified live that Terraform-issued calls for it
@@ -1066,6 +1084,102 @@ stay type-only, since `silver_batch` is a materialized view and
 doesn't support the OneLake mirroring policy command (see
 `fabric/eventhouse`'s "Verified against a live tenant" section
 above).
+
+**A correctly-shaped definition is not enough — every TimeSeries
+entity also needs a static binding, which this generator didn't emit
+for a while.** Confirmed live on a fresh deploy: the Ontology item,
+all 22 entity types, all 27 Contextualizations, and every source
+table's data were entirely correct, and `fabric_iq_ontology` queries
+still failed with `search_ontology: The Graph Model is not ready` —
+the GraphModel's own job history showed exactly one refresh attempt,
+failed non-retriably with `GraphNotRefreshable: "Graph doesn't have
+valid content and cannot be refreshed."`
+
+Root cause, confirmed against Microsoft's own docs
+([Bind Data - Microsoft Fabric](https://learn.microsoft.com/en-us/fabric/iq/ontology/how-to-bind-data)):
+*"Before you bind time series data to an entity type, make sure your
+static data binding is complete. The entity type must have at least
+one property with static data bound to it."* `batch`, `quality_check`,
+`line_status`, and all 6 `sensor_reading_<stage>` entities — 9 of the
+22 — had their key column correctly carved out as a static
+`properties` entry (required separately: "Entity keys can only
+reference static properties"), but **no data binding was ever wired
+to that static property**, only the TimeSeries one. The Fabric
+portal's own entity type details page surfaces this directly:
+`QualityCheck` showed **"Missing static binding."** The Prerequisites
+tenant-setting theory in an earlier version of this doc was a red
+herring — a side-by-side tenant settings diff found no relevant
+setting difference at all; this was a definition-generation bug the
+whole time.
+
+**Fixed** by giving each of those 9 entities a second, `NonTimeSeries`
+`DataBinding` (`STATIC_BINDING_SOURCE` in
+`generate_fabric_iq_definition.py`). The static source must itself be
+OneLake-backed and a **managed** table, not the OneLake-mirrored
+*shortcuts* used for Contextualizations above (Fabric IQ's docs
+explicitly exclude "external tables that show in the lakehouse but
+reside in a different location") — so:
+- The 6 `sensor_reading_<stage>` entities are keyed by `LineId` alone,
+  which already exists in the native `production_line` table — their
+  fix needed no new data, just a binding pointing there.
+- `batch`/`quality_check`/`line_status` are keyed by `BatchId`/
+  `CheckId`/`EventId`, which exist nowhere as a native table.
+  `materialize_static_sources.py` (new) copies each one's full row out
+  of the Eventhouse into a real Delta table in the dimension Lakehouse
+  — unlike every other `null_resource` in `infra/fabric.tf`, this one
+  is wired to run on **every** `terraform apply`
+  (`triggers.always_run`), not once, since these three keep growing as
+  the simulator streams.
+
+There is still no public Fabric REST API to trigger a graph rebuild;
+after redeploying the definition, it has to be retriggered from the
+Ontology item's own page in the Fabric portal.
+
+**Confirmed fixed live**: after `terraform apply` ran
+`materialize_static_sources.py` (uploaded 3,010/18,024/2,548 rows for
+`batch`/`quality_check`/`line_status` respectively, confirmed via
+OneLake as real Delta parquet files) and redeployed the Ontology
+definition (confirmed via `getDefinition` — `QualityCheck` now shows
+both a `TimeSeries -> silver_quality_check` and a
+`NonTimeSeries -> quality_check` binding), a manual graph refresh from
+the Ontology item's page in the portal **succeeded**
+(`GraphModel`'s own job history: `Completed`, no `failureReason`).
+
+Worth noting for anyone hitting this fresh: the GraphModel's job
+history actually shows *three* refresh attempts, not two — the
+original hard failure right after a fresh deploy
+(`GraphNotRefreshable`, non-retriable), then a `Completed` refresh the
+next morning with no code changes in between, then today's `Completed`
+refresh after this fix. The most likely explanation for the middle
+one: OneLake mirroring latency (documented above, up to hours in the
+worst case per Microsoft's own docs) — the shortcut-mirrored source
+data for the Contextualizations probably hadn't propagated into
+OneLake yet at the moment of the first attempt, and had by the next
+morning, letting the job *complete* even though 9 entities still had
+no static binding and came up empty individually (matching "Factory
+has data, QualityCheck doesn't" being visible at that point). So: a
+`Completed` graph refresh is necessary but not sufficient evidence
+that a specific entity actually has data — check that entity's own
+type details too.
+
+**Separately, still an open question, not yet re-tested against the
+now-working graph:** 16 of the 27 relationship Contextualizations
+bind through the OneLake-mirror *shortcuts* (`quality_check`,
+`line_status`, all 6 `sensor_reading_<stage>`), the same "external
+table" pattern the docs say isn't supported for bindings in general.
+Since the graph refresh above succeeded with those shortcuts still in
+place, this concern may turn out to be moot for Contextualizations
+specifically (unlike for entity-level static bindings, where it
+mattered) — worth confirming next by checking whether the
+relationships that depend on those shortcuts (e.g. `check_to_line`,
+`line_status_to_line`) actually resolve real instance data in the
+portal's graph view, not just that the refresh job itself succeeded.
+If it turns out they don't, the next step is pointing those
+Contextualizations at `quality_check`/`line_status`'s new native
+tables from `materialize_static_sources.py` instead of the shortcuts
+(the 12 `reading_<stage>_to_line`/`reading_<stage>_to_batch`
+relationships would still need the shortcuts, or a similar
+materialization, since their source tables have no native copy).
 
 Also worth knowing if extending this further: `generate_fabric_iq_definition.py`'s
 docstring documents a real correctness bug found and fixed in the

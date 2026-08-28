@@ -1,0 +1,18 @@
+{
+  "id": "817444489231353093",
+  "dataBindingConfiguration": {
+    "dataBindingType": "NonTimeSeries",
+    "propertyBindings": [
+      {
+        "sourceColumnName": "EventId",
+        "targetPropertyId": "549721031266699837"
+      }
+    ],
+    "sourceTableProperties": {
+      "sourceType": "LakehouseTable",
+      "workspaceId": "{{ .WorkspaceId }}",
+      "itemId": "{{ .LakehouseId }}",
+      "sourceTableName": "line_status"
+    }
+  }
+}

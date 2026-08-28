@@ -654,6 +654,40 @@ resource "null_resource" "deploy_onelake_shortcuts" {
 }
 
 # ---------------------------------------------------------------------
+# Native (non-shortcut) copies of batch/quality_check/line_status in the
+# dimension Lakehouse -- the required static-binding source for those
+# entities' TimeSeries data, and (via production_line, already native)
+# for the 6 sensor_reading_<stage> entities too. See
+# fabric/ontology/materialize_static_sources.py's docstring for why the
+# OneLake shortcuts above don't qualify (Fabric IQ only accepts
+# *managed* Lakehouse tables for static bindings, not external/shortcut
+# ones) and why this must re-run on every apply rather than once: unlike
+# every other null_resource in this file, `always_run` intentionally
+# forces that -- these three source tables keep growing as the
+# simulator streams, so a stale copy would silently miss newer
+# batches/checks/status events on the next graph refresh.
+# ---------------------------------------------------------------------
+
+resource "null_resource" "materialize_static_sources" {
+  depends_on = [null_resource.load_kql, fabric_lakehouse.dimensions]
+
+  triggers = {
+    always_run = timestamp()
+  }
+
+  provisioner "local-exec" {
+    command = "uv run --with azure-kusto-data --with azure-identity --with azure-storage-file-datalake --with requests ${path.module}/../fabric/ontology/materialize_static_sources.py"
+
+    environment = {
+      FABRIC_WORKSPACE_ID = local.workspace_id
+      FABRIC_LAKEHOUSE_ID = fabric_lakehouse.dimensions.id
+      KQL_QUERY_URI       = fabric_kql_database.this.properties.query_service_uri
+      KQL_DATABASE        = fabric_kql_database.this.display_name
+    }
+  }
+}
+
+# ---------------------------------------------------------------------
 # Fabric IQ Ontology -- all Factory/Quality entities (batch, quality_check,
 # line_status, and 6 per-stage sensor_reading entities bound TimeSeries
 # to the Eventhouse; factory, production_line, production_stage, recipe
@@ -674,7 +708,12 @@ resource "null_resource" "deploy_onelake_shortcuts" {
 # ---------------------------------------------------------------------
 
 resource "null_resource" "deploy_ontology" {
-  depends_on = [null_resource.load_kql, null_resource.load_dimension_tables, null_resource.deploy_onelake_shortcuts]
+  depends_on = [
+    null_resource.load_kql,
+    null_resource.load_dimension_tables,
+    null_resource.deploy_onelake_shortcuts,
+    null_resource.materialize_static_sources,
+  ]
 
   triggers = {
     files_hash = sha256(join("", [

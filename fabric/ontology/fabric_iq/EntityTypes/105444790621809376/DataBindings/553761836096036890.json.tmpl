@@ -1,0 +1,18 @@
+{
+  "id": "553761836096036890",
+  "dataBindingConfiguration": {
+    "dataBindingType": "NonTimeSeries",
+    "propertyBindings": [
+      {
+        "sourceColumnName": "CheckId",
+        "targetPropertyId": "4898981233688552"
+      }
+    ],
+    "sourceTableProperties": {
+      "sourceType": "LakehouseTable",
+      "workspaceId": "{{ .WorkspaceId }}",
+      "itemId": "{{ .LakehouseId }}",
+      "sourceTableName": "quality_check"
+    }
+  }
+}

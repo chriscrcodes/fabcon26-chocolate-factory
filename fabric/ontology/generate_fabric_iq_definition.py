@@ -30,11 +30,24 @@ uses:
 - For a TimeSeries entity, the identifying key column must be a
   **static** `properties` entry, not a `timeseriesProperties` one
   ("Entity keys cannot be specified when the entity type has no static
-  properties. Entity keys can only reference static properties.").
+  properties. Entity keys can only reference static properties.") --
+  **and that static property still needs its own static data binding**,
+  a distinct, separate requirement from just being typed correctly.
+  Per Microsoft's own docs
+  (https://learn.microsoft.com/en-us/fabric/iq/ontology/how-to-bind-data):
+  "Before you bind time series data to an entity type, make sure your
+  static data binding is complete." Missing this entirely for all 9
+  TimeSeries entities was a real bug here for a while -- confirmed live
+  by the Fabric portal's entity type details showing "Missing static
+  binding" on `QualityCheck`, and the Ontology's GraphModel item
+  failing to refresh at all (`GraphNotRefreshable`) as a result. Fixed
+  by `STATIC_BINDING_SOURCE` below, which gives each TimeSeries entity
+  a second, NonTimeSeries `DataBinding` alongside its TimeSeries one.
 
 So: `batch`, `quality_check`, `line_status`, and the 6 `sensor_reading_*`
 stage entities (all genuinely time-indexed) bind to the Eventhouse as
-TimeSeries; everything else -- Factory/Quality's dimension tables
+TimeSeries (plus a required static binding, see `STATIC_BINDING_SOURCE`
+below); everything else -- Factory/Quality's dimension tables
 (`factory`, `production_line`, `production_stage`, `recipe`) and all of
 Supply Chain/ERP (`supplier`, `material`, `inventory`, `shipment`,
 `customer`, `product`, `sales_order`, `order_line`, `invoice`) -- binds
@@ -304,6 +317,38 @@ EVENTHOUSE_MIRROR_SHORTCUTS = {
     **{f"sensor_reading_{stage}": f"silver_{stage}" for stage in STAGE_READING_TABLES},
 }
 
+# Every TimeSeries entity's key column (BatchId/CheckId/EventId/LineId)
+# is correctly carved out as a static `properties` entry (see the
+# is_time_series branch in main()), but until this mapping was added
+# nothing ever bound it to a data source -- Fabric IQ's own docs
+# (https://learn.microsoft.com/en-us/fabric/iq/ontology/how-to-bind-data)
+# require a *static* binding before a TimeSeries one can attach
+# identity: "The entity type must have at least one property with
+# static data bound to it." Confirmed live: the Fabric portal's entity
+# type details for QualityCheck showed "Missing static binding," and
+# the Ontology's GraphModel failed to refresh at all
+# (`GraphNotRefreshable: "Graph doesn't have valid content"`) -- 9 of
+# 22 entity types (batch/quality_check/line_status + all 6
+# sensor_reading_<stage> entities) were missing this.
+#
+# The static source must be OneLake-backed and a *managed* table, not
+# an external/shortcut one (same docs page's limitations section) --
+# EVENTHOUSE_MIRROR_SHORTCUTS above doesn't qualify. Table name ->
+# (Lakehouse table providing the key column, that table's name for the
+# key column). The 6 sensor_reading_<stage> entities are keyed by
+# LineId alone, which already exists in the native `production_line`
+# table -- no new data needed. batch/quality_check/line_status are
+# keyed by BatchId/CheckId/EventId, which exist nowhere as a native
+# Lakehouse table -- materialize_static_sources.py creates one (a full
+# row copy, re-run before every graph refresh since these three keep
+# growing, unlike the CSV-sourced dimension tables).
+STATIC_BINDING_SOURCE = {
+    "batch": ("batch", "BatchId"),
+    "quality_check": ("quality_check", "CheckId"),
+    "line_status": ("line_status", "EventId"),
+    **{f"sensor_reading_{stage}": ("production_line", "LineId") for stage in STAGE_READING_TABLES},
+}
+
 
 def data_binding_source_table(table: str) -> str | None:
     """The Lakehouse-area table name (native or shortcut) a relationship's
@@ -450,6 +495,29 @@ def main() -> None:
             OUT / "EntityTypes" / eid / "DataBindings" / f"{data_binding_id}.json.tmpl",
             data_binding,
         )
+
+        if is_time_series:
+            static_table, static_key_col = STATIC_BINDING_SOURCE[table]
+            static_binding_id = stable_id(f"{table}.static_binding")
+            static_binding = {
+                "id": static_binding_id,
+                "dataBindingConfiguration": {
+                    "dataBindingType": "NonTimeSeries",
+                    "propertyBindings": [
+                        {"sourceColumnName": static_key_col, "targetPropertyId": property_id(table, key_col)}
+                    ],
+                    "sourceTableProperties": {
+                        "sourceType": "LakehouseTable",
+                        "workspaceId": "{{ .WorkspaceId }}",
+                        "itemId": "{{ .LakehouseId }}",
+                        "sourceTableName": static_table,
+                    },
+                },
+            }
+            write_json(
+                OUT / "EntityTypes" / eid / "DataBindings" / f"{static_binding_id}.json.tmpl",
+                static_binding,
+            )
 
     n_contextualizations = 0
     for rel in ALL_RELATIONSHIPS:
