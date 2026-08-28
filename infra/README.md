@@ -84,6 +84,44 @@ Event Hub auth, chosen by whether a workspace identity is available
   Eventstream authenticates via Entra ID rather than a shared access key
   — see "Eventstream's Event Hub source auth" below.
 
+### Fabric workspace items, explained
+
+`terraform apply` doesn't account for everything that shows up in the
+Fabric workspace item list -- some items are Fabric's own side effects
+of creating another item, not something this repo's Terraform
+provisions directly. Full inventory, confirmed live via the Fabric
+REST API's `list-items` call against a deployed workspace:
+
+| Item | Managed by | Notes |
+|---|---|---|
+| Eventhouse `chocolate-factory-eventhouse` | `fabric_eventhouse.this` | The real Eventhouse container |
+| KQLDatabase `chocolate-factory-eventhouse` | Fabric (auto-created) | Empty, unused default companion database Fabric always creates alongside a new Eventhouse, sharing its exact display name -- not in Terraform state, `terraform destroy` doesn't touch it, safe to ignore |
+| KQLDatabase `chocolate-factory-kql` | `fabric_kql_database.this` | The real database -- Bronze/Silver/Gold medallion tables live here |
+| Lakehouse `chocolate_factory_dimensions` | `fabric_lakehouse.dimensions` | Static dimension tables (no timestamp, can't live in the Eventhouse) |
+| SQLDatabase `chocolate_factory_business` | `fabric_sql_database.business` | Supply Chain/ERP tables |
+| Ontology `ChocolateFactory` | `null_resource.deploy_ontology` (script-driven -- see the `ALMOperationImportFailed` comment near `data.external.ontology_item` for why there's no native Terraform resource) | Binds the Eventhouse, dimensions Lakehouse, and SQL Database |
+| Lakehouse/GraphModel `ChocolateFactory_lh_<id>` / `ChocolateFactory_graph_<id>` | Fabric (auto-created by the Ontology) | Internal storage backing the Ontology's queryable graph -- follows from the Ontology itself being unmanaged by Terraform |
+| SQLEndpoint (one per Lakehouse/SQL Database) | Fabric (auto-created) | Read-only T-SQL analytics endpoint Fabric provisions automatically for every Lakehouse/SQL Database |
+| Eventstream `chocolate-factory-eventstream` | `fabric_eventstream.this` | Event Hub → Bronze ingestion |
+| DataAgent `chocolate_factory_data_agent` | `fabric_data_agent.business` | Grounds in Eventhouse Silver tables only |
+| OperationsAgent `chocolate_factory_predictive_maintenance` | `fabric_operations_agent.predictive_maintenance` | Watches `silver_tempering.CrystalFormIndex` |
+| Reflex `chocolate-factory-operations-agent-connector` | `fabric_activator.operations_agent_connector` | Stores the Operations Agent's alert Power Automate connection |
+
+**The default companion database is harmless -- leave it.** Fabric
+auto-creates it with every Eventhouse; it's empty, costs nothing
+extra, and Terraform can neither create nor destroy it deliberately
+(`fabric_kql_database`'s `database_type` only supports `ReadWrite` or
+`Shortcut` -- no way to adopt/import an already-existing default,
+confirmed against the provider's schema). Delete it manually in the
+portal only if the item list bothers you; there's no functional
+effect either way.
+
+**Names mix hyphens and underscores on purpose, not by accident.**
+Lakehouse- and Ontology-family item types reject hyphens in Fabric's
+API ("DisplayName is Invalid for ArtifactType" -- see the comment on
+`fabric_lakehouse.dimensions`), so those items use underscores while
+everything else uses hyphens.
+
 ### Prerequisites
 
 Beyond `terraform.tfvars` values, the deploying identity and machine need
