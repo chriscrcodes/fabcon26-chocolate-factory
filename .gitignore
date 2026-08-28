@@ -29,3 +29,6 @@ apm_modules/
 .mcp.json
 apm.yml
 apm.lock.yaml
+
+# Presentation decks -- not part of this repo's public history
+*.pptx
