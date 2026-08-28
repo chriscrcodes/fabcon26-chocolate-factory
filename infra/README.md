@@ -138,6 +138,10 @@ confirm them up front rather than discovering them one apply at a time:
 
 ### Deploy
 
+For the full end-to-end procedure (this step plus running the
+simulator and querying the agent), see
+[`../INSTRUCTIONS.md`](../INSTRUCTIONS.md). Just this step:
+
 ```bash
 cp terraform.tfvars.example terraform.tfvars   # fill in the Azure/Fabric values
 terraform init

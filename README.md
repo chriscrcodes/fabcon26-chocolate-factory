@@ -93,6 +93,7 @@ simplification (see "Known limitations" below).
 
 | Folder | What's there |
 |---|---|
+| [`INSTRUCTIONS.md`](INSTRUCTIONS.md) | Everything needed to deploy and run this end to end — prerequisites, `terraform apply`, the simulator, and the demo query walkthrough |
 | [`simulator/`](simulator) | Python telemetry generator streaming production-line events to Event Hub |
 | [`fabric/`](fabric) | The Fabric side: Eventhouse KQL, the Ontology, the SQL Database, the Data Agent, and the Operations Agent |
 | [`foundry/`](foundry) | The Foundry side: the agent itself (`foundry/agents/`) and the Foundry IQ knowledge base (`foundry/kb/`) |
@@ -105,35 +106,23 @@ Each subfolder (`fabric/eventhouse/`, `fabric/ontology/`,
 
 ## ⚡ Quick start
 
-```bash
-cd infra
-cp terraform.tfvars.example terraform.tfvars   # fill in your Azure/Fabric values
-terraform init
-terraform apply
-```
-
-One `terraform apply` against any subscription, into any existing
-resource group, provisions the whole stack: the Fabric capacity,
+One `terraform apply` provisions the whole stack — Fabric capacity,
 workspace, Eventhouse, Ontology, SQL Database, the Foundry IQ
-knowledge base, the Foundry project, and the agent itself — wired to
-all its tools. See [`infra/README.md`](infra/README.md) for full
-details, including the couple of things that stay genuinely manual
-(called out there, not hidden).
-
-Then start the simulator to see live data flow:
-
-```bash
-cd simulator
-uv run --env-file .env run_simulator.py
-```
+knowledge base, the Foundry project, and the agent itself, wired to
+all its tools. Full deploy prerequisites, the simulator (real-time,
+backfill, and per-scenario commands), and the query walkthrough are
+all in **[`INSTRUCTIONS.md`](INSTRUCTIONS.md)**.
 
 ## 🎤 The demo
 
-Full script — what to ask, in what order, and why — in
+Short version: the agent picks the right tool per question and cites
+it. The exact commands to run it are in
+[`INSTRUCTIONS.md`](INSTRUCTIONS.md); the full FabCon talk script —
+narrative framing, talking points, and the honest "what didn't make
+the cut" section — is in
 [`doc/fabcon-demo-scenario.md`](doc/fabcon-demo-scenario.md); the
-complete, live-verified question bank in
-[`doc/questions.md`](doc/questions.md). Short version: the agent picks
-the right tool per question and cites it.
+complete, live-verified question bank is in
+[`doc/questions.md`](doc/questions.md).
 
 - *"What counts as an overdue invoice?"* → the knowledge base, with a
   citation

@@ -46,6 +46,10 @@ cp .env.sample .env   # fill in your Event Hub connection string or namespace
 
 ## Run
 
+For prerequisites, scenario variants (anomaly burst, downtime,
+Operations Agent trigger), and querying the agent afterward, see
+[`../INSTRUCTIONS.md`](../INSTRUCTIONS.md).
+
 ```bash
 # 1. Write the dimension CSVs (factory, production_line, production_stage, recipe)
 uv run run_seed_data.py
