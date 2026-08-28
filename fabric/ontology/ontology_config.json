@@ -1,7 +1,7 @@
 {
   "scenario": "chocolate",
   "name": "Chocolate Factory",
-  "description": "Four chocolate factories (Barcelona, Chicago, São Paulo, Singapore), each running 2-3 production lines through the in-factory stages of chocolate making (grinding through packaging), plus the supply chain and ERP data around them. Farm Preparation (harvest, fermentation, drying, roasting, winnowing) happens near cocoa origin, upstream of these factories -- see farm-preparation.md -- and is represented here only as incoming 'Cocoa Nibs' material from suppliers.",
+  "description": "Four chocolate factories (Barcelona, Chicago, São Paulo, Singapore), each running 2-3 production lines through the in-factory stages of chocolate making (grinding through packaging), plus the supply chain and ERP data around them. Farm Preparation (harvest, fermentation, drying, roasting, winnowing) happens near cocoa origin, upstream of these factories -- see ../../CHOCOLATE-FACTORY.md -- and is represented here only as incoming 'Cocoa Nibs' material from suppliers.",
   "tables": {
     "factory": {
       "columns": ["FactoryId", "Code", "City", "Country", "Region", "TimeZone"],

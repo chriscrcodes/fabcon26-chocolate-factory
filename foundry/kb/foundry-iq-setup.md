@@ -1,18 +1,18 @@
 # Connecting the Foundry project to the knowledge base
 
 The Foundry IQ knowledge base itself (`chocolate-factory-kb`) is fully
-provisioned by `terraform apply` — see [`README.md`](README.md) and
-`infra/README.md`'s "Foundry IQ knowledge base" section for how
-`deploy_search_indexer.py` creates the data source, index, indexer,
-knowledge source, and knowledge base end to end.
+provisioned by `terraform apply` — see the root [`README.md`](../../README.md)
+and [`SETUP.md`](../../SETUP.md)'s "Foundry IQ knowledge base" section
+for how `deploy_search_indexer.py` creates the data source, index,
+indexer, knowledge source, and knowledge base end to end.
 
 The Foundry project's **Connected resource** to that Search service,
 and the project-level **connection** that exposes the knowledge base
 as an MCP tool an agent can call, are also both provisioned by
 `terraform apply` — `azurerm_role_assignment.foundry_project_search_reader`
 and `azapi_resource.foundry_iq_kb_connection` in `infra/azure.tf`. See
-that file and `infra/README.md`'s "Wiring the knowledge base into the
-Foundry project as an agent tool" section for why this needed
+that file and [`SETUP.md`](../../SETUP.md)'s "Wiring the knowledge base
+into the Foundry project as an agent tool" section for why this needed
 `azapi_resource` rather than a native `azurerm` resource. Nothing here
 requires a manual portal step anymore.
 
@@ -67,6 +67,6 @@ troubleshooting the Foundry-side knowledge base at all.
 Attaching this knowledge base's connection
 (`AZURE_FOUNDRY_KB_CONNECTION_NAME` output, `chocolate-factory-kb`) to
 a specific agent's tool list is a separate, per-agent step once an
-agent exists — see `foundry/kb/README.md`'s "Deploying" section and the
+agent exists — see `SETUP.md`'s foundry/kb "Deploying" section and the
 FabCon demo plan's Phase 2.5 write-up for the MCP connection details
 (`allowed_tools: ["knowledge_base_retrieve"]`).

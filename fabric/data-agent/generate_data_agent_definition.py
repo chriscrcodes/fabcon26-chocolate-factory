@@ -35,7 +35,7 @@ identically both via this agent's MCP endpoint and the portal's own
 native chat panel ("the available data sources do not contain supplier
 information"). Concluded this is a current product limitation of Data
 Agent + Lakehouse Tables for this data shape, not a configuration
-mistake -- see fabric/data-agent/README.md for the full sequence tried
+mistake -- see SETUP.md's fabric/data-agent section for the full sequence tried
 (kept there for anyone revisiting this once the underlying Fabric
 feature matures). Supply Chain/ERP grounding for the Foundry agent
 comes from the Fabric IQ Ontology (already covers all 9 tables with 27

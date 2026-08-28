@@ -377,7 +377,7 @@ resource "fabric_workspace_role_assignment" "search_contributor" {
 # that indexes Files/kb/ straight out of OneLake -- the Foundry IQ
 # knowledge base itself, on top of this index, has no documented
 # Terraform/REST path yet and stays a manual portal step (see
-# foundry/kb/README.md).
+# SETUP.md's foundry/kb section).
 resource "null_resource" "deploy_search_indexer" {
   depends_on = [
     null_resource.load_kb_files,
@@ -594,7 +594,7 @@ resource "fabric_eventstream" "this" {
 # fabric_kql_database's `definition` attribute takes a DatabaseSchema.kql
 # bundle, but whether that format tolerates `.alter table policy
 # streamingingestion`/`.create-or-alter materialized-view` is unverified
-# (see fabric/eventhouse/README.md); this local-exec path is what was
+# (see SETUP.md's fabric/eventhouse section); this local-exec path is what was
 # actually run and verified against a live tenant. Requires `az login`
 # and `uv` on the machine running `terraform apply`.
 # ---------------------------------------------------------------------
@@ -801,7 +801,7 @@ output "FABRIC_SQL_DATABASE_NAME" {
 # ("data sources ... do not contain supplier information"). Concluded
 # this is a current product limitation of Data Agent + Lakehouse Tables
 # for this data shape, not a configuration mistake -- see
-# foundry/agents/README.md for the full sequence tried. Supply
+# SETUP.md's foundry/agents section for the full sequence tried. Supply
 # Chain/ERP grounding for the Foundry agent comes from the Ontology
 # (already covers all 9 tables with 27 real relationships) instead.
 # ---------------------------------------------------------------------
@@ -889,7 +889,7 @@ locals {
 }
 
 # Stores the SendTemperingAlert action's Power Automate connection
-# string -- see doc/operations-agent-setup.md for the one-time manual
+# string -- see SETUP.md's Operations Agent section for the one-time manual
 # steps (connection string + flow) this repo can't automate: nothing in
 # the fabric_operations_agent definition schema references this item,
 # the link only exists on the Fabric portal/Power Automate side.
@@ -927,7 +927,7 @@ resource "fabric_operations_agent" "predictive_maintenance" {
   # resets dataSources[].id to all-zeros and shouldRun to false, leaving
   # the agent Inactive with a broken data-source binding. Terraform must
   # never push a definition update to this resource after initial
-  # creation -- see infra/README.md's Operations Agent section for the
+  # creation -- see SETUP.md's Operations Agent section for the
   # one-time manual portal finish-up this requires instead.
   lifecycle {
     ignore_changes = [definition]
@@ -940,7 +940,7 @@ output "FABRIC_OPERATIONS_AGENT_ID" {
 }
 
 output "FABRIC_OPERATIONS_AGENT_CONNECTOR_ID" {
-  description = "Activator item used to store SendTemperingAlert's Power Automate connection -- see doc/operations-agent-setup.md."
+  description = "Activator item used to store SendTemperingAlert's Power Automate connection -- see SETUP.md's Operations Agent section."
   value       = fabric_activator.operations_agent_connector.id
 }
 

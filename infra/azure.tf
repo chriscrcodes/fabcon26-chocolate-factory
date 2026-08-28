@@ -209,7 +209,7 @@ output "LOCAL_AUTH_ENABLED" {
 
 # ---------------------------------------------------------------------
 # Azure AI Search -- backs the Foundry IQ knowledge base over foundry/kb/
-# (see foundry/kb/README.md). Foundry IQ's OneLake ingestion still
+# (see SETUP.md's foundry/kb section). Foundry IQ's OneLake ingestion still
 # provisions/uses a real Search index behind the scenes (it only
 # eliminates hand-building the ingestion/chunking pipeline, not Search
 # itself -- confirmed against

@@ -10,7 +10,7 @@ orders, and invoicing.
 > Shipped/Delivered/Cancelled) vocabularies are what
 > `simulator/src/business_data.py` settled on. Also bound into the
 > Fabric IQ Ontology, mirrored into the dimension Lakehouse (see
-> `fabric/ontology/README.md`'s "Deploying to Fabric IQ").
+> `SETUP.md`'s "Deploying to Fabric IQ" section).
 
 ## Products
 

@@ -12,6 +12,21 @@ Fabric, ground a real Fabric IQ Ontology and a Foundry IQ knowledge
 base, and get answered live by a single Microsoft Foundry agent that
 picks the right tool per question — and cites it.
 
+```
+        _____________________________
+       |  ___   ___   ___   ___      |     ~ ~ ~ ~
+       | |   | |   | |   | |   |     |    (  smoke  )
+       | |___| |___| |___| |___|     |     ~ ~ ~ ~
+       |    CHOCOLATE FACTORY   [||] |________
+       |_________________________[||]|  o   o |
+        |  |  |  |  |  |  |  |  |    |________|
+    ____|__|__|__|__|__|__|__|__|_____
+   /  cacao -> grind -> temper -> bar  \
+  '--------------------------------------'
+        |####|  |####|  |####|  |####|
+        '----'  '----'  '----'  '----'
+```
+
 Nothing here is a mockup. Every box in the diagrams below is real,
 deployed infrastructure, provisioned by one `terraform apply`.
 
@@ -93,16 +108,50 @@ simplification (see "Known limitations" below).
 
 | Folder | What's there |
 |---|---|
-| [`INSTRUCTIONS.md`](INSTRUCTIONS.md) | Everything needed to deploy and run this end to end — prerequisites, `terraform apply`, the simulator, and the demo query walkthrough |
+| [`SETUP.md`](SETUP.md) | Everything needed to deploy and run this end to end — prerequisites, `terraform apply`, the simulator, per-subsystem deploy/troubleshooting detail, the demo query walkthrough, and the full verified question bank |
+| [`CHOCOLATE-FACTORY.md`](CHOCOLATE-FACTORY.md) | The chocolate manufacturing process this demo simulates — the four factories and the bean-to-bar stages, with photos |
 | [`simulator/`](simulator) | Python telemetry generator streaming production-line events to Event Hub |
 | [`fabric/`](fabric) | The Fabric side: Eventhouse KQL, the Ontology, the SQL Database, the Data Agent, and the Operations Agent |
 | [`foundry/`](foundry) | The Foundry side: the agent itself (`foundry/agents/`) and the Foundry IQ knowledge base (`foundry/kb/`) |
 | [`infra/`](infra) | One Terraform state provisioning everything above, Azure and Fabric together |
-| [`doc/`](doc) | Design memos, the demo script, and the live-verified question bank |
 
-Each subfolder (`fabric/eventhouse/`, `fabric/ontology/`,
-`fabric/sql-database/`, `fabric/data-agent/`, `foundry/kb/`,
-`foundry/agents/`) has its own README with the detail for that piece.
+## 🧬 Data model
+
+One Coordinator agent reasoning across three domains, each owning its
+own tables — `factory`, `batch`, and `recipe` are the shared keys that
+let answers from different domains join together:
+
+| Domain | Owns | Notes |
+|---|---|---|
+| **Factory / Quality** | `factory`, `production_line`, `production_stage`, `batch`, `sensor_reading`, `quality_check`, `line_status` | Streamed telemetry — see [`CHOCOLATE-FACTORY.md`](CHOCOLATE-FACTORY.md) for the process it represents |
+| **Supply Chain** | `supplier`, `material`, `inventory`, `shipment` | Batch-loaded, Fabric SQL Database |
+| **ERP / Orders** | `customer`, `product`, `sales_order`, `order_line`, `invoice` | Batch-loaded, Fabric SQL Database |
+
+Cross-domain relationships (all real, bound in the Fabric IQ Ontology
+— see [`SETUP.md`'s `fabric/ontology` section](SETUP.md#fabricontology)
+for which ones have live instance data vs. type-only):
+
+```
+production_line.FactoryId   -> factory.FactoryId
+batch.LineId                -> production_line.LineId
+batch.RecipeId               -> recipe.RecipeId
+sensor_reading.LineId        -> production_line.LineId
+sensor_reading.BatchId       -> batch.BatchId
+quality_check.BatchId        -> batch.BatchId
+line_status.LineId           -> production_line.LineId
+material.SupplierId          -> supplier.SupplierId
+inventory.MaterialId         -> material.MaterialId
+inventory.FactoryId          -> factory.FactoryId
+shipment.FromFactoryId       -> factory.FactoryId
+shipment.BatchId              -> batch.BatchId
+product.RecipeId             -> recipe.RecipeId
+sales_order.CustomerId       -> customer.CustomerId
+order_line.OrderId            -> sales_order.OrderId
+order_line.ProductId          -> product.ProductId
+invoice.OrderId               -> sales_order.OrderId
+```
+
+Full column-level schema: `fabric/ontology/ontology_config.json`.
 
 ## ⚡ Quick start
 
@@ -111,18 +160,24 @@ workspace, Eventhouse, Ontology, SQL Database, the Foundry IQ
 knowledge base, the Foundry project, and the agent itself, wired to
 all its tools. Full deploy prerequisites, the simulator (real-time,
 backfill, and per-scenario commands), and the query walkthrough are
-all in **[`INSTRUCTIONS.md`](INSTRUCTIONS.md)**.
+all in **[`SETUP.md`](SETUP.md)**.
 
 ## 🎤 The demo
 
+Built for "Multi-Agent Data Systems: Fabric + Foundry in Action" (60
+min, level 300). Four learning objectives, and where each lives in
+the stack:
+
+| Objective | Where it lives |
+|---|---|
+| Fabric grounding enterprise data | Eventhouse (live telemetry) + Fabric SQL Database (Supply Chain/ERP) + Foundry IQ knowledge base, all queried live, not mocked |
+| Fabric IQ for context-aware reasoning | The Fabric IQ Ontology — 22 entity types, 27 real bound relationships spanning both engines |
+| Orchestrate AI workflows using Foundry | One Foundry Agent Service agent, 3 tools, picking the right one per question and citing it |
+| Multi-agent architectures combining data and AI agents | See "What we tried and didn't make the cut" below — this is where the talk earns its "in Action" credibility rather than a polished happy path |
+
 Short version: the agent picks the right tool per question and cites
-it. The exact commands to run it are in
-[`INSTRUCTIONS.md`](INSTRUCTIONS.md); the full FabCon talk script —
-narrative framing, talking points, and the honest "what didn't make
-the cut" section — is in
-[`doc/fabcon-demo-scenario.md`](doc/fabcon-demo-scenario.md); the
-complete, live-verified question bank is in
-[`doc/questions.md`](doc/questions.md).
+it. The exact commands to run it, and the full verified question
+bank, are in [`SETUP.md`](SETUP.md#6-query-the-demo-agent).
 
 - *"What counts as an overdue invoice?"* → the knowledge base, with a
   citation
@@ -132,11 +187,57 @@ complete, live-verified question bank is in
   checks failed today at those same factories?"* → the agent chains
   the Ontology and the Data Agent together, one feeding the other
 
+### What we tried and didn't make the cut
+
+The section that makes this a level-300 talk instead of a vendor
+demo. Both are presented as evidence of rigor, not confessions — the
+audience should leave trusting the parts that *do* work more, not
+less.
+
+**A second Data Agent source for Supply Chain/ERP — abandoned.**
+Tried 5 configurations grounding the shared Fabric Data Agent in a
+Lakehouse mirror of the Supply Chain/ERP tables, escalating each
+time, including an exact byte-for-byte reproduction of a config the
+Fabric portal's own "+ Add data source" picker generated. All 5
+failed identically — the decisive one was tested in **the portal's
+own native chat panel**, not just this repo's code, which is what
+rules out a config mistake and confirms a genuine platform limitation
+in Data Agent + Lakehouse Tables query execution for this data shape.
+Resolution: Supply Chain/ERP grounding comes from the Ontology tool
+instead — no functionality lost, just routed differently. Full
+sequence in [`SETUP.md`'s `fabric/data-agent` section](SETUP.md#fabricdata-agent).
+
+**A2A agent-to-agent orchestration — abandoned, with a fully-diagnosed
+root cause.** A timeboxed spike to build a real Coordinator + 2
+specialist-agent architecture, specifically to serve the "multi-agent
+architectures" objective more literally than one agent with three
+tools does. Two genuinely undocumented requirements were found and
+fixed along the way (a separate "Foundry Agent Consumer" role grant
+for the calling agent's own instance identity, and `kind`
+discriminators the A2A JSON-RPC schema requires but Microsoft's own
+published examples omit). The raw A2A protocol itself was gotten
+working end to end — a direct JSON-RPC call to the target agent's
+endpoint returned the correct, verified answer. But the actual
+product mechanism for wiring this into a live agent (the
+`a2a_preview` tool) failed reproducibly with an opaque,
+non-diagnosable error, confirmed not to be a config mistake by
+standing up Application Insights specifically to chase it.
+
+The honest framing: "multi-agent" in production today most often
+means one orchestrating agent reasoning across multiple *specialized
+data agents and knowledge sources* — not necessarily multiple
+*conversational* agents talking to each other. The centerpiece
+question above is real evidence that pattern works well right now.
+This demo also tried the more literal interpretation via Foundry's
+`a2a_preview` tool, and can show exactly where that stands today: the
+protocol and auth model work, the product's own tool-invocation layer
+for it doesn't yet.
+
 ## ✅ Verified, not asserted
 
-Every question in [`doc/questions.md`](doc/questions.md) is tagged by
-what actually happened when it was run against the live, deployed
-stack — not what should happen in theory:
+Every question in the [full question bank](SETUP.md#the-full-verified-question-bank)
+is tagged by what actually happened when it was run against the
+live, deployed stack — not what should happen in theory:
 
 | | Count | Meaning |
 |---|---|---|
@@ -154,7 +255,7 @@ Stated plainly, not hidden:
 - The Fabric Data Agent only grounds Factory/Quality telemetry — a
   second Lakehouse-backed source for Supply Chain/ERP was tried and
   doesn't work as of this writing (see
-  [`fabric/data-agent/README.md`](fabric/data-agent/README.md));
+  [`SETUP.md`'s `fabric/data-agent` section](SETUP.md#fabricdata-agent));
   Supply Chain/ERP grounding comes from the Ontology tool instead.
 - No `recipe`/`batch` → `material`/`supplier` relationship exists in
   the Ontology — it can answer "who are our suppliers" but not
@@ -163,11 +264,11 @@ Stated plainly, not hidden:
   generated on either the simulator or seed-data side.
 - The Operations Agent needs one manual portal step after `terraform
   apply` to connect its alert action — see
-  [`doc/operations-agent-setup.md`](doc/operations-agent-setup.md).
+  [`SETUP.md`'s Operations Agent section](SETUP.md#7-one-time-manual-step-operations-agent).
 - Two things stay outside Terraform's reach on a fresh deploy: Fabric
   IQ's region availability, and Fabric workspace access for anyone who
   isn't the person who ran `terraform apply` — see
-  [`infra/README.md`](infra/README.md).
+  [`SETUP.md`'s "Reproducing on a different subscription"](SETUP.md#reproducing-on-a-different-subscription).
 
 ## 📜 License
 

@@ -1,10 +1,10 @@
 """The six in-factory production stages and the sensors on each.
 
 Farm Preparation (harvest/fermentation, drying/roasting, winnowing) happens
-off-site near cocoa origin -- see fabric/ontology/farm-preparation.md -- so it
+off-site near cocoa origin -- see ../../CHOCOLATE-FACTORY.md -- so it
 has no stage here. Every factory line runs these six stages, in order, for
 every batch. Ranges are grounded in the process descriptions published by
-Fauchon and Alain Ducasse (see the design memo for sources).
+Fauchon and Alain Ducasse (see CHOCOLATE-FACTORY.md for sources).
 
 StageId values match the `production_stage` dimension in
 fabric/ontology/ontology_config.json; Metric names become the `Metric` column

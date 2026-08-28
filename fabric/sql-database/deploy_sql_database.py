@@ -119,7 +119,7 @@ def main() -> None:
         # `cafile` is set (there's no separate encrypt=True flag).
         # SSL_CERT_FILE lets this and every other script in this repo
         # share one CA bundle override for corporate TLS-inspecting
-        # proxies (see infra/README.md's Zscaler troubleshooting
+        # proxies (see SETUP.md's Prerequisites Zscaler troubleshooting
         # note); falls back to certifi's default bundle otherwise.
         cafile=os.environ.get("SSL_CERT_FILE") or certifi.where(),
         # pytds's own hostname-validation code (tls.py's validate_host)
