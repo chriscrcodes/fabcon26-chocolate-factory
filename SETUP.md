@@ -346,6 +346,42 @@ either let the nightly schedule pause it again afterward or run
 `fabric/manage_capacity.py pause` yourself when done for the day (see
 §8).
 
+### Capacity sizing (F2/F4) and what consumes CUs
+
+Azure Monitor does not expose `Microsoft.Fabric/capacities` metrics
+(not in its supported metric namespace list) — capacity utilization
+(background vs. interactive CU-seconds, throttling state, smoothing)
+is only visible in the **Microsoft Fabric Capacity Metrics app**
+(a Power BI report installed from the portal), not via ARM/Azure
+Monitor. Check that app first when diagnosing "Out of capacity" or
+throttling, not the Azure portal's metrics blade.
+
+F2/F4 are small (2/4 CUs) and every one of the following draws from
+the same shared pool, concurrently:
+- The simulator's continuous Event Hub → Eventstream → Eventhouse
+  ingestion (`--interval`, default 5s; backfill mode streams a much
+  higher volume in short bursts, throttled client-side by
+  `--backfill-batch-ticks` against Event Hub only, not against the
+  Eventhouse/Lakehouse write side).
+- `materialize_static_sources.py`, which re-copies the full
+  `batch`/`quality_check`/`line_status` tables (thousands to tens of
+  thousands of rows) out of the Eventhouse into the Lakehouse on
+  **every** `terraform apply` (`triggers.always_run`), not just when
+  their content changed.
+- Ontology GraphModel refreshes (manual, from the portal) and Foundry
+  agent `fabric_iq_ontology`/`fabric_data_agent` queries — both are
+  interactive-priority background/foreground workloads on the same
+  capacity.
+
+None of this is throttled or rate-limited against each other by the
+repo's own tooling. If capacity pressure shows up during a demo
+session, the fastest levers are: pause the simulator between runs
+rather than leaving it streaming continuously, avoid running
+`terraform apply` (which re-triggers the Lakehouse copy) at the same
+time as live agent queries, and temporarily scale the capacity SKU up
+(`fabric_capacity_sku`) for the duration of a heavy session rather
+than sizing permanently for peak load.
+
 ### Agent tracing and observability
 
 `azurerm_application_insights.foundry` (workspace-based, backed by
@@ -1144,6 +1180,12 @@ reside in a different location") — so:
 There is still no public Fabric REST API to trigger a graph rebuild;
 after redeploying the definition, it has to be retriggered from the
 Ontology item's own page in the Fabric portal.
+`deploy_fabric_iq_ontology.py` now prints this as an explicit
+post-deploy reminder (with the GraphModel's last known job status)
+after every create/update, since skipping it leaves the graph serving
+the pre-update schema and every entity type query — not just the ones
+that changed — can fail with `The label expression (X) does not match
+any node type in the graph`.
 
 **Confirmed fixed live**: after `terraform apply` ran
 `materialize_static_sources.py` (uploaded 3,010/18,024/2,548 rows for

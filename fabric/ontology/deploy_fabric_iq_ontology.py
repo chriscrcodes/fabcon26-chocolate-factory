@@ -84,6 +84,52 @@ def wait_for_operation(session: requests.Session, operation_url: str) -> None:
         time.sleep(int(resp.headers.get("Retry-After", 5)))
 
 
+def print_refresh_reminder(session: requests.Session, workspace_id: str) -> None:
+    """Warn that the definition update just pushed does NOT take effect
+    against the live GraphModel until someone manually refreshes it in
+    the portal -- there is no Fabric REST API to trigger this. Skipping
+    it (or the terraform apply being the last thing anyone runs) leaves
+    the graph serving a stale schema: every entity type query, not just
+    the changed ones, then fails with errors like "The label expression
+    (X) does not match any node type in the graph."
+    """
+    graph_model_id = None
+    last_job = "unknown (lookup failed)"
+    try:
+        resp = session.get(f"{API_BASE}/workspaces/{workspace_id}/items", params={"type": "GraphModel"})
+        resp.raise_for_status()
+        for item in resp.json().get("value", []):
+            if item["displayName"].startswith(f"{DISPLAY_NAME}_graph_"):
+                graph_model_id = item["id"]
+                break
+        if graph_model_id:
+            resp = session.get(f"{API_BASE}/workspaces/{workspace_id}/items/{graph_model_id}/jobs/instances")
+            resp.raise_for_status()
+            jobs = resp.json().get("value", [])
+            if jobs:
+                latest = jobs[0]
+                last_job = f"{latest['status']} at {latest.get('endTimeUtc') or latest.get('startTimeUtc')}"
+            else:
+                last_job = "no refresh has ever run"
+    except requests.RequestException:
+        pass
+
+    print(
+        "\n"
+        "=====================================================================\n"
+        "ACTION REQUIRED: this definition update does not take effect on the\n"
+        "live graph until it is manually refreshed.\n"
+        f"  Last known GraphModel job: {last_job}\n"
+        "  There is no Fabric REST API to trigger this -- open the Ontology\n"
+        f"  item ('{DISPLAY_NAME}') in the Fabric portal and run 'Refresh' from\n"
+        "  its page. Until that refresh completes, agent queries against ANY\n"
+        "  entity type (not just ones you just changed) can fail with:\n"
+        "  \"The label expression (X) does not match any node type in the\n"
+        "  graph\" -- the graph is serving the schema from before this update.\n"
+        "====================================================================="
+    )
+
+
 def main() -> None:
     workspace_id = os.environ["FABRIC_WORKSPACE_ID"]
     tokens = {
@@ -117,6 +163,7 @@ def main() -> None:
         if resp.status_code == 202:
             wait_for_operation(session, resp.headers["Location"])
         print(f"updated ontology item {existing_id}")
+        print_refresh_reminder(session, workspace_id)
     else:
         print("creating new ontology item")
         resp = session.post(
@@ -134,6 +181,7 @@ def main() -> None:
         else:
             item_id = resp.json()["id"]
         print(f"created ontology item {item_id}")
+        print_refresh_reminder(session, workspace_id)
 
 
 if __name__ == "__main__":
