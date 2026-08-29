@@ -94,6 +94,8 @@ def build_definition() -> dict:
     return {
         "model": os.environ["AZURE_FOUNDRY_MODEL_DEPLOYMENT_NAME"],
         "kind": "prompt",
+        "reasoning": {"effort": "none"},
+        "text": {"verbosity": "low"},
         "instructions": (
             "You are the chocolate factory's assistant, grounded in "
             "three tools: the knowledge_base tool for policy/definition "
@@ -132,7 +134,13 @@ def build_definition() -> dict:
             "which factories first. Before giving a final answer, check "
             "every part of the original question is covered by a tool "
             "result -- if a part is still missing, call the tool that "
-            "covers it rather than reporting that part as unavailable."
+            "covers it rather than reporting that part as unavailable. "
+            "Always call fabric_iq_ontology's search_ontology with "
+            "naturalLanguageResponse set to false -- synthesize the "
+            "final answer yourself from the raw result, the same way "
+            "you already do for the other two tools, rather than paying "
+            "for a second natural-language summary the tool would "
+            "otherwise generate on its own."
         ),
         "tools": [
             {

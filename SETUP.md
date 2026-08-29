@@ -405,6 +405,28 @@ one ends) regardless of `parallel_tool_calls` or prompt instructions —
 a Foundry Agent Service platform behavior for remote MCP tools, not
 something fixable from the agent or prompt side.
 
+This is specific to **Prompt agents** (`"kind": "prompt"`, what
+`chocolate-factory-agent` is): the platform owns the entire
+tool-calling loop, so nothing in the agent definition or its
+instructions can change how it schedules tool calls. A **Hosted
+agent** (`"kind": "hosted"` — your own orchestration code in a
+container, per
+[Microsoft's docs](https://learn.microsoft.com/en-us/azure/foundry/agents/concepts/hosted-agents))
+owns its own loop instead, so it could call multiple MCP tools
+concurrently (e.g. `asyncio.gather()`) if its orchestration code is
+written to do so — but this repo has never actually tested that a
+Hosted agent gets real concurrent MCP execution; the one Hosted-agent
+precedent here (`git log --all -- foundry/agents`, commit `b59c348`,
+reverted by `2b6e405`) was built solely to bypass the broken
+`a2a_preview` tool for agent-to-agent calls, and even its own two
+specialist calls were made sequentially by design, not concurrently.
+Switching agent kind only helps multi-tool turns (e.g. the
+`centerpiece-*` questions in `test_agent_questions.py`) — it does
+nothing for single-tool latency, which is dominated by each tool's own
+backend (Fabric IQ's NL→graph-query translation, the Data Agent's own
+synthesis, Azure AI Search retrieval), unaffected by which agent kind
+calls it.
+
 ### Why Terraform, not Bicep
 
 Bicep can only reach `Microsoft.Fabric/capacities` (see below) —
