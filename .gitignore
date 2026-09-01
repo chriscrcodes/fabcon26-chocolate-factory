@@ -32,3 +32,6 @@ apm.lock.yaml
 
 # Presentation decks -- not part of this repo's public history
 *.pptx
+
+# Generated test-run output, not source
+foundry/agents/test-results.jsonl

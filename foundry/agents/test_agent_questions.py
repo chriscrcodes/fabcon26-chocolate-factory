@@ -12,6 +12,23 @@ assertion runs, so a failing test still leaves data behind for the
 response-time analysis pass (see SETUP.md's "Agent tracing and
 observability" section for the App Insights side of that analysis).
 
+Before trusting a slow result as agent-side, follow SETUP.md's
+"Measuring agent latency validly" checklist (pause the simulator, don't
+run `terraform apply` concurrently, check the Fabric Capacity Metrics
+app for throttling) -- this repo's own capacity is small and shared
+across ingestion, materialization, GraphModel refreshes, and agent
+queries, unthrottled against each other.
+
+If AZURE_APP_INSIGHTS_NAME and AZURE_RESOURCE_GROUP are set, each
+result also gets a best-effort `tool_call_durations` breakdown (per
+server_label, in seconds) pulled from App Insights' `dependencies`
+table, so a slow multi-tool question's time can be attributed to a
+specific hop instead of only a total. And once per session, before any
+fabric_iq_ontology-dependent question runs, the GraphModel's last
+refresh job status is checked (see fabric/ontology/graph_refresh_status.py)
+-- a stale/failed graph produces a diagnosed `graph_stale_warning` tag
+in the result instead of an unexplained 400 mid-run.
+
 Assertion strictness follows the question's tag, matching this repo's
 "verified, not asserted" discipline:
   - verified:      must succeed, and (if keywords given) the answer
@@ -25,6 +42,10 @@ Assertion strictness follows the question's tag, matching this repo's
                     today (documented root causes in SETUP.md), so a
                     failure is not reported as broken, but a surprise
                     pass is called out (the docs would need updating).
+                    A case may also carry `wrong_answer`: phrasing that
+                    identifies a confident-but-wrong answer, for the
+                    failures that arrive as answers rather than errors
+                    and would otherwise pass every generic assertion.
 
 Auth: AzureCliCredential (az login), same as every other script in
 this repo. The querying identity needs the same real Fabric workspace
@@ -38,22 +59,36 @@ Usage:
         uv run --with pytest --with azure-identity --with requests \\
         -m pytest foundry/agents/test_agent_questions.py -v -s
 
-    Both env vars come straight from `infra`'s terraform outputs
-    (AZURE_FOUNDRY_ACCOUNT_NAME, AZURE_FOUNDRY_PROJECT_NAME).
+    Optional, for the two latency-diagnostics additions -- both no-op
+    (silently skipped) if unset:
+        FABRIC_WORKSPACE_ID=...          # GraphModel freshness preflight
+        AZURE_APP_INSIGHTS_NAME=... AZURE_RESOURCE_GROUP=...  # per-hop breakdown
+
+    All four come straight from `infra`'s terraform outputs
+    (AZURE_FOUNDRY_ACCOUNT_NAME, AZURE_FOUNDRY_PROJECT_NAME are required;
+    the other two are optional).
 """
 
 import json
 import os
+import subprocess
+import sys
 import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
 import requests
 from azure.identity import AzureCliCredential
 
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "fabric" / "ontology"))
+from graph_refresh_status import describe_last_refresh_job, get_last_refresh_job  # noqa: E402
+
 AGENT_NAME = os.environ.get("AZURE_FOUNDRY_AGENT_NAME", "chocolate-factory-agent")
 RESULTS_PATH = Path(__file__).parent / "test-results.jsonl"
 REQUEST_TIMEOUT_SECONDS = 180
+APP_INSIGHTS_NAME = os.environ.get("AZURE_APP_INSIGHTS_NAME")
+APP_INSIGHTS_RESOURCE_GROUP = os.environ.get("AZURE_RESOURCE_GROUP")
 
 # id, tool(s) exercised, tag (verified/candidate/known-to-fail), question,
 # expect: list of case-insensitive substrings, any one of which must
@@ -78,13 +113,17 @@ QUESTIONS = [
     dict(
         id="kb-nib-shortage-substitution",
         tool="knowledge_base",
-        tag="candidate",
+        tag="verified",
         question="Why can't a nib shortage always be substituted the way a packaging shortage can?",
-        expect=None,
+        expect=["nib", "grinding"],
     ),
     dict(
         id="kb-chocolate-percentage-range",
         tool="knowledge_base",
+        # Stays candidate for a grounding reason, not a content one: the
+        # answer is correct (0-70% cacao, matching recipe.csv's
+        # CacaoPercent) but the agent routes to fabric_iq_ontology, not
+        # the knowledge_base this question is meant to exercise.
         tag="candidate",
         question="What's our company's chocolate percentage range across recipes?",
         expect=None,
@@ -111,23 +150,33 @@ QUESTIONS = [
     dict(
         id="data-agent-anomalies",
         tool="fabric_data_agent",
-        tag="verified",
+        # The Data Agent's anomaly scan errors out inside the tool: the
+        # agent reports "the telemetry scan hit a semantic error" and
+        # declines to list anomalies rather than guessing. Reproduced on
+        # three consecutive runs, with live telemetry flowing and a
+        # freshly refreshed GraphModel, so this is the tool's behaviour
+        # and not a data or capacity artifact.
+        tag="known-to-fail",
         question="Are there any anomalies I should be aware of?",
         expect=None,
     ),
     dict(
         id="data-agent-most-downtime-line",
         tool="fabric_data_agent",
-        tag="candidate",
+        tag="verified",
         question="Which line has the most downtime today?",
-        expect=None,
+        # Needs live telemetry for "today" to be non-empty -- run the
+        # simulator first, or this answers "no line status data for
+        # today" and fails on these keywords, correctly.
+        expect=["downtime"],
     ),
     dict(
         id="data-agent-avg-defect-rate-by-stage",
         tool="fabric_data_agent",
-        tag="candidate",
+        tag="verified",
         question="What's the average defect rate by stage this week?",
-        expect=None,
+        # Same live-telemetry precondition as most-downtime-line.
+        expect=["tempering", "grinding", "packaging"],
     ),
     dict(
         id="ontology-entity-types",
@@ -137,7 +186,7 @@ QUESTIONS = [
         # Accept either an explicit count or real entity names in the
         # list -- confirmed live the agent sometimes enumerates names
         # without stating "22" as a number.
-        expect=["22", "qualitycheck", "productionline", "sensorreading"],
+        expect=["23", "qualitycheck", "productionline", "sensorreading"],
     ),
     dict(
         id="ontology-suppliers",
@@ -156,56 +205,79 @@ QUESTIONS = [
     dict(
         id="ontology-line-to-factory",
         tool="fabric_iq_ontology",
-        tag="candidate",
+        # "production line 1 at EMEA-BCN" is not an identifier shape the
+        # ontology resolves -- same family as using a factory's Code
+        # where its FactoryId is the actual foreign key (see
+        # ontology-shipments-to-factory below). Answers "no matching
+        # ontology record" against a freshly refreshed graph.
+        tag="known-to-fail",
         question="Which factory does production line 1 at EMEA-BCN belong to?",
         expect=["barcelona", "bcn", "emea"],
     ),
     dict(
         id="ontology-shipments-to-factory",
         tool="fabric_iq_ontology",
-        tag="candidate",
+        tag="verified",
         # FAC-CHI is the factory's FactoryId (shipment.FromFactoryId's
         # actual foreign key) -- distinct from its Code, "NA-CHI" (see
         # factory.csv: FactoryId,Code are two different columns). Using
         # Code here returns zero results -- confirmed live, not a
         # system bug, a wrong identifier for this specific query.
         question="What shipments is factory FAC-CHI receiving?",
-        expect=None,
+        expect=["ship-"],
     ),
     dict(
         id="centerpiece-shipments-and-quality",
         tool="fabric_iq_ontology + fabric_data_agent (chained)",
-        tag="verified",
+        # Both tools are still called, and the ontology half is correct,
+        # but the chain does not close: the Data Agent declines to
+        # filter quality checks by a factory list handed to it, because
+        # shipments are outside its grounding scope ("the quality-check
+        # tool cannot filter by shipment-receiving factories because it
+        # has no shipments data"). Earlier runs looked like successes
+        # partly because the count was 0, which is trivially
+        # correlatable. Use centerpiece-worst-quality-and-inventory as
+        # the flagship chain instead -- it resolves both halves.
+        tag="known-to-fail",
         question=(
             "Which factories are receiving shipments, and how many "
             "quality checks failed today at those same factories?"
         ),
         expect=None,
-        # This is the flagship two-tool chain -- an HTTP 200 with the
-        # ontology half correct but the fabric_data_agent half silently
-        # blocked mid-chain (confirmed live: "hit a technical block")
-        # would otherwise pass the generic checks above. Catch that
-        # partial-failure case explicitly rather than treating any 200
-        # as success.
         reject=["technical block", "couldn't get a valid", "blocked query"],
     ),
     dict(
         id="centerpiece-worst-quality-and-inventory",
-        tool="fabric_iq_ontology + fabric_data_agent + fabric SQL (chained)",
-        tag="candidate",
+        tool="fabric_data_agent + fabric_iq_ontology (chained)",
+        # The flagship two-tool chain: the Data Agent returns the worst
+        # factory this week, that factory becomes the ontology call's
+        # argument, and the ontology returns its materials' on-hand
+        # quantities against their reorder levels. Both halves resolve,
+        # and the answer lands on a decision rather than a count.
+        tag="verified",
         question=(
             "Which factory has the worst quality this week, and do we "
             "have enough inventory of its key material to keep it "
             "running?"
         ),
-        expect=None,
+        expect=["fac-chi", "na-chi"],
+        # A 200 whose second half quietly gives up would otherwise pass
+        # the generic checks -- the inventory half is the point here.
+        reject=["can't confirm", "cannot confirm", "couldn't confirm", "can't reliably"],
     ),
     dict(
         id="known-fail-pronoun-reference",
         tool="fabric_iq_ontology",
+        # No referent for "this", and the failure is no longer an error:
+        # the agent enumerates every supplier in the ontology as though
+        # they all supplied the unnamed product, then offers to narrow
+        # down. A plausible wrong answer passes every generic check a
+        # tool error would trip, so it is matched explicitly via
+        # `wrong_answer` below.
         tag="known-to-fail",
         question="Who are the suppliers of this product?",
         expect=None,
+        wrong_answer=["product/material shown in the data", "if you meant a specific product"],
     ),
     dict(
         id="known-fail-batch-material-traceability",
@@ -222,6 +294,39 @@ QUESTIONS = [
         expect=None,
     ),
 ]
+
+
+@pytest.fixture(scope="module")
+def graph_model_freshness():
+    """Once per session: check the GraphModel's last refresh job status
+    (see fabric/ontology/graph_refresh_status.py) so a stale/failed graph
+    is a diagnosed, expected warning instead of an opaque 400 mid-run.
+    There is still no Fabric REST API to trigger a refresh -- this only
+    detects staleness, it can't fix it.
+    """
+    workspace_id = os.environ.get("FABRIC_WORKSPACE_ID")
+    if not workspace_id:
+        return None
+
+    token = AzureCliCredential().get_token("https://api.fabric.microsoft.com/.default").token
+    session = requests.Session()
+    session.headers["Authorization"] = f"Bearer {token}"
+    job = get_last_refresh_job(session, workspace_id)
+
+    if job is None or job.get("status") != "Succeeded":
+        print(
+            "\n"
+            "=====================================================================\n"
+            "WARNING: GraphModel's last refresh job did not succeed (or none was\n"
+            f"found): {describe_last_refresh_job(job)}\n"
+            "fabric_iq_ontology-dependent questions below may fail with \"The\n"
+            "label expression (X) does not match any node type in the graph\" --\n"
+            "open the Ontology item in the Fabric portal and run 'Refresh' before\n"
+            "trusting these results as a measure of steady-state latency.\n"
+            "====================================================================="
+        )
+        return describe_last_refresh_job(job)
+    return None
 
 
 @pytest.fixture(scope="module")
@@ -271,7 +376,8 @@ def _extract_output(body: dict) -> tuple[str, list[dict]]:
 
 
 def _ask(session: requests.Session, project_endpoint: str, question: str):
-    started = time.monotonic()
+    started_wall = datetime.now(timezone.utc)
+    started_monotonic = time.monotonic()
     response = session.post(
         f"{project_endpoint}/openai/v1/responses",
         data=json.dumps(
@@ -282,8 +388,65 @@ def _ask(session: requests.Session, project_endpoint: str, question: str):
         ),
         timeout=REQUEST_TIMEOUT_SECONDS,
     )
-    elapsed_seconds = time.monotonic() - started
-    return elapsed_seconds, response
+    elapsed_seconds = time.monotonic() - started_monotonic
+    return started_wall, elapsed_seconds, response
+
+
+def _query_tool_call_durations(started_wall: datetime, elapsed_seconds: float) -> dict[str, float] | None:
+    """Best-effort per-tool-call latency breakdown for one request, via
+    App Insights `dependencies` (see SETUP.md's "Agent tracing and
+    observability" -- confirmed live that tool calls show up there as
+    per-call spans with real start/end timestamps). Correlated by a
+    wall-clock time window around this request, not a request/trace id
+    (none is available client-side from the Responses API response),
+    so it's approximate under concurrent test runs -- fine for this
+    harness's sequential `-s` usage, not a general-purpose profiler.
+
+    Returns None (never raises) if AZURE_APP_INSIGHTS_NAME/
+    AZURE_RESOURCE_GROUP aren't set, the `az` CLI call fails, or the
+    dependency `name` field doesn't match a known tool label -- this is
+    a diagnostic aid, never a test dependency. The exact `name` App
+    Insights assigns to an MCP tool-call dependency hasn't been
+    confirmed against a live trace at the time this was written; if the
+    breakdown comes back empty, check the raw `az monitor app-insights
+    query` output directly (SETUP.md has the exact command) and adjust
+    the `has_any` list below.
+    """
+    if not APP_INSIGHTS_NAME or not APP_INSIGHTS_RESOURCE_GROUP:
+        return None
+
+    window_start = started_wall - timedelta(seconds=5)
+    window_end = started_wall + timedelta(seconds=elapsed_seconds + 15)
+    query = (
+        "dependencies "
+        f"| where timestamp between (datetime({window_start.isoformat()}) .. datetime({window_end.isoformat()})) "
+        "| where name has_any ('fabric_iq_ontology', 'fabric_data_agent', 'knowledge_base') "
+        "| project name, duration "
+        "| order by timestamp asc"
+    )
+    try:
+        proc = subprocess.run(
+            [
+                "az", "monitor", "app-insights", "query",
+                "--app", APP_INSIGHTS_NAME,
+                "--resource-group", APP_INSIGHTS_RESOURCE_GROUP,
+                "--analytics-query", query,
+                "--output", "json",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=True,
+        )
+        rows = json.loads(proc.stdout)["tables"][0]["rows"]
+    except (subprocess.SubprocessError, OSError, ValueError, KeyError, IndexError) as e:
+        print(f"  (App Insights per-hop query skipped: {e})")
+        return None
+
+    durations: dict[str, float] = {}
+    for name, duration_ms in rows:
+        durations[name] = durations.get(name, 0.0) + round(float(duration_ms) / 1000.0, 3)
+    return durations or None
 
 
 def _record(result: dict) -> None:
@@ -292,9 +455,9 @@ def _record(result: dict) -> None:
 
 
 @pytest.mark.parametrize("case", QUESTIONS, ids=[c["id"] for c in QUESTIONS])
-def test_agent_question(agent_client, case):
+def test_agent_question(agent_client, graph_model_freshness, case):
     session, project_endpoint = agent_client
-    elapsed_seconds, response = _ask(session, project_endpoint, case["question"])
+    started_wall, elapsed_seconds, response = _ask(session, project_endpoint, case["question"])
 
     body: dict = {}
     parse_error = None
@@ -311,11 +474,14 @@ def test_agent_question(agent_client, case):
         "question": case["question"],
         "http_status": response.status_code,
         "elapsed_seconds": round(elapsed_seconds, 3),
+        "tool_call_durations": _query_tool_call_durations(started_wall, elapsed_seconds),
         "tool_calls": tool_calls,
         "answer_text": text,
         "parse_error": parse_error,
         "raw_body_on_error": None if response.ok else body or response.text[:2000],
     }
+    if "fabric_iq_ontology" in case["tool"] and graph_model_freshness:
+        result["graph_stale_warning"] = graph_model_freshness
     _record(result)
 
     if case["tag"] == "known-to-fail":
@@ -323,6 +489,16 @@ def test_agent_question(agent_client, case):
         # xfail so it doesn't count as a broken test, but a surprise
         # pass is reported (strict=False) -- that would mean the repo's
         # docs are stale and should be updated.
+        #
+        # Some failures are answers, not errors: the agent returns a
+        # confident, plausible, wrong result that trips none of the
+        # markers below and passes every generic assertion. `wrong_answer`
+        # names the phrasing that identifies one of those, so a silent
+        # wrong answer is recorded as the documented failure it is
+        # instead of a pass.
+        wrong_answer = case.get("wrong_answer")
+        if wrong_answer and any(kw in text.lower() for kw in wrong_answer):
+            pytest.xfail(f"documented wrong-answer behavior reproduced: {text[:200]!r}")
         if not response.ok or any(
             marker in text.lower()
             for marker in (

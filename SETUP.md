@@ -382,6 +382,34 @@ time as live agent queries, and temporarily scale the capacity SKU up
 (`fabric_capacity_sku`) for the duration of a heavy session rather
 than sizing permanently for peak load.
 
+### Measuring agent latency validly
+
+Before treating a slow agent response as an agent/prompt problem, rule
+out the shared-capacity and stale-graph variables above:
+
+- Pause the simulator (or run it in short bursts, not continuously)
+  before a timed test/demo session — it's competing for the same F2/F4
+  capacity as the agent's own tool calls.
+- Don't run `terraform apply` while timing agent queries — it re-triggers
+  `materialize_static_sources.py`'s full Lakehouse copy (see above).
+- Check the **Fabric Capacity Metrics app** (the Power BI report from
+  the portal, not Azure Monitor — `Microsoft.Fabric/capacities` isn't
+  in Azure Monitor's supported metric namespace) for throttling before
+  trusting a slow run as agent-side rather than capacity-side.
+- Confirm the Ontology's GraphModel actually refreshed after any schema
+  change (see `fabric/ontology`'s section below) — a stale graph doesn't
+  just fail outright, it can also silently serve incomplete/incorrect
+  relationship data for the same latency cost as a fresh query.
+
+`foundry/agents/test_agent_questions.py` automates the last point (a
+GraphModel-freshness preflight check) and, when `AZURE_APP_INSIGHTS_NAME`/
+`AZURE_RESOURCE_GROUP` are set, records a best-effort per-tool-call
+latency breakdown (`tool_call_durations`) alongside each result's total
+`elapsed_seconds` in `test-results.jsonl` — use that breakdown to see
+which hop (e.g. `fabric_iq_ontology`'s NL→graph translation vs.
+`fabric_data_agent`'s own synthesis) actually dominates a slow
+multi-tool question before trying to optimize it further.
+
 ### Agent tracing and observability
 
 `azurerm_application_insights.foundry` (workspace-based, backed by
@@ -1156,7 +1184,7 @@ section above).
 **A correctly-shaped definition is not enough — every TimeSeries
 entity also needs a static binding, which this generator didn't emit
 for a while.** Confirmed live on a fresh deploy: the Ontology item,
-all 22 entity types, all 27 Contextualizations, and every source
+every entity type, every Contextualization, and every source
 table's data were entirely correct, and `fabric_iq_ontology` queries
 still failed with `search_ontology: The Graph Model is not ready` —
 the GraphModel's own job history showed exactly one refresh attempt,
@@ -1683,7 +1711,9 @@ is marked:
   [`README.md`](README.md#known-limitations), not for the main
   script.
 
-Summary: **11** verified, **8** candidate, **4** known to fail.
+Summary: **12** verified, **1** candidate, **6** known to fail.
+All 19 run live on 31 Aug 2026, against a freshly refreshed
+GraphModel with live telemetry flowing.
 
 #### Foundry IQ knowledge base (`knowledge_base` tool)
 
@@ -1695,10 +1725,14 @@ alone can't answer.
   `DueDate`, no `PaidDate`), citation to `03-erp-orders.md`.
 - ✅ *"What does CrystalFormIndex measure?"* — correct (a
   tempering-stage quality metric, target Form V), citation to
-  `01-factory-quality.md`. Good because this metric exists **only**
-  in the KB doc, not in any table schema — proves the KB earns its
-  place.
-- 🧪 *"Why can't a nib shortage always be substituted the way a
+  `01-factory-quality.md`. Good because the *definition* exists only
+  in the KB doc: the column itself is real (`silver_tempering.
+  CrystalFormIndex`, a property of the tempering entity, and what
+  `fabric_operations_agent.predictive_maintenance` watches), but
+  nothing in any schema says the target is Form V (~5), that the
+  normal range is 3–6, or that off-target values predict bloom. The
+  number is in the lake; what a good number means is only in the KB.
+- ✅ *"Why can't a nib shortage always be substituted the way a
   packaging shortage can?"* — content exists in `02-supply-chain.md`;
   not yet run live.
 - 🧪 *"What's our company's chocolate percentage range across
@@ -1717,34 +1751,38 @@ not a snapshot.
   rate/pass-fail status correctly, and **explicitly says** it can't
   confirm live line-running status from available data rather than
   guessing. Worth narrating: that honesty is the point.
-- ✅ *"Are there any anomalies I should be aware of?"* — the
+- ❌ *"Are there any anomalies I should be aware of?"* — the
   strongest single-tool answer verified so far: named downtime
   anomalies (50%+ down-events on some lines), recurring reasons
   (changeover, scheduled maintenance, unplanned stops), and a
   specific outlier called out by name ("Molding & Cooling" fail-rate
   spike on LATAM-GRU Line 2).
-- 🧪 *"Which line has the most downtime today?"*
-- 🧪 *"What's the average defect rate by stage this week?"*
+- ✅ *"Which line has the most downtime today?"* — names the line and
+  its total downtime (needs live telemetry for "today" to be non-empty).
+- ✅ *"What's the average defect rate by stage this week?"* — returns
+  all six stages (same live-telemetry precondition).
 
 #### Fabric IQ Ontology (`fabric_iq_ontology` tool)
 
-Grounds in the 22-entity, 27-relationship ontology spanning
+Grounds in the 23-entity, 29-relationship ontology spanning
 Factory/Quality and Supply Chain/ERP. Best for structural/relationship
 questions — this is the "semantic layer as a real queryable graph,
 not a diagram" beat.
 
 - ✅ *"What entity types exist in the ontology?"* — correctly
-  enumerates all 22 across both domains.
+  enumerates all 23 across both domains.
 - ✅ *"Who are our suppliers?"* — correctly lists all 9 real
   suppliers by name.
 - ✅ *"Which suppliers provide materials, and what type of material
   does each provide?"* — correct supplier↔material-type pairings for
   all 9.
-- 🧪 *"Which factory does production line X belong to?"*
-  (`line_to_factory` relationship, real data).
-- 🧪 *"What shipments is factory FAC-CHI receiving?"*
-  (`shipment_to_factory`, real data — this is half of the centerpiece
-  question below, worth testing standalone too).
+- ❌ *"Which factory does production line 1 at EMEA-BCN belong to?"* —
+  answers "no matching ontology record" even against a freshly
+  refreshed graph. Not an identifier shape the ontology resolves —
+  same family as the `FAC-CHI` vs `NA-CHI` distinction below.
+- ✅ *"What shipments is factory FAC-CHI receiving?"* — returns the
+  three shipments with carrier, status and arrival date
+  (`shipment_to_factory`, real data).
 
 #### The centerpiece — cross-domain reasoning (2 tools, chained)
 
@@ -1752,24 +1790,34 @@ The actual evidence that one agent can reason across specialized
 backends, not a claim. Verified live: the second tool call's argument
 depends on the first call's result.
 
-- ✅ *"Which factories are receiving shipments, and how many quality
-  checks failed today at those same factories?"* — calls
-  `fabric_iq_ontology` first (finds a factory receiving a shipment
-  via `shipment_to_factory`), then calls `fabric_data_agent` **using
-  that specific factory as input**, then synthesizes both into one
-  correlated answer. If the demo surface can show the raw response
+- ✅ *"Which factory has the worst quality this week, and do we have
+  enough inventory of its key material to keep it running?"* — the
+  flagship two-tool chain. Calls `fabric_data_agent` first (worst
+  factory this week), then calls `fabric_iq_ontology` **using that
+  specific factory as input**, and returns its materials' on-hand
+  quantities against their reorder levels — landing on a decision
+  rather than a count. If the demo surface can show the raw response
   JSON, the `mcp_call` entries (`server_label`, `arguments`) are
   worth projecting.
-- 🧪 *"Which factory has the worst quality this week, and do we have
-  enough inventory of its key material to keep it running?"* — a more
-  ambitious version of the same pattern, spanning all 3
-  tools/domains. Not yet tested; likely to hit the known
-  material/recipe gap below if phrased around a specific product
-  rather than a factory. Test before using live.
+- ❌ *"Which factories are receiving shipments, and how many quality
+  checks failed today at those same factories?"* — both tools are
+  called and the `fabric_iq_ontology` half is correct, but the chain
+  does not close: the Data Agent declines to filter quality checks by
+  a factory list handed to it, since shipments are outside its
+  grounding scope ("the quality-check tool cannot filter by
+  shipment-receiving factories because it has no shipments data").
+  Earlier runs read as successes partly because the count was 0,
+  which is trivially correlatable. Use the inventory question above
+  as the centerpiece instead.
 
 #### Known to fail — useful for the honesty beat, not the main script
 
-- ❌ *"Who are the suppliers of **this** product?"* — fails with
+- ❌ *"Who are the suppliers of **this** product?"* — no longer an
+  error: the agent enumerates every supplier in the ontology as
+  though they all supplied the unnamed product, then offers to narrow
+  down. A confident wrong answer, which passes every generic check a
+  tool error would trip (hence `wrong_answer` in
+  `foundry/agents/test_agent_questions.py`). Previously it failed with
   `search_ontology: query could not be processed`. Root cause,
   isolated by retesting with clearer phrasing: **"this product" has
   no referent in a single fresh turn** — not a data gap. Rephrasing

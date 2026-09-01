@@ -33,6 +33,8 @@ from azure.identity import AzureCliCredential
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+from graph_refresh_status import describe_last_refresh_job, get_last_refresh_job
+
 HERE = Path(__file__).parent
 DEFINITION_DIR = HERE / "fabric_iq"
 DISPLAY_NAME = "ChocolateFactory"
@@ -93,26 +95,7 @@ def print_refresh_reminder(session: requests.Session, workspace_id: str) -> None
     the changed ones, then fails with errors like "The label expression
     (X) does not match any node type in the graph."
     """
-    graph_model_id = None
-    last_job = "unknown (lookup failed)"
-    try:
-        resp = session.get(f"{API_BASE}/workspaces/{workspace_id}/items", params={"type": "GraphModel"})
-        resp.raise_for_status()
-        for item in resp.json().get("value", []):
-            if item["displayName"].startswith(f"{DISPLAY_NAME}_graph_"):
-                graph_model_id = item["id"]
-                break
-        if graph_model_id:
-            resp = session.get(f"{API_BASE}/workspaces/{workspace_id}/items/{graph_model_id}/jobs/instances")
-            resp.raise_for_status()
-            jobs = resp.json().get("value", [])
-            if jobs:
-                latest = jobs[0]
-                last_job = f"{latest['status']} at {latest.get('endTimeUtc') or latest.get('startTimeUtc')}"
-            else:
-                last_job = "no refresh has ever run"
-    except requests.RequestException:
-        pass
+    last_job = describe_last_refresh_job(get_last_refresh_job(session, workspace_id))
 
     print(
         "\n"
