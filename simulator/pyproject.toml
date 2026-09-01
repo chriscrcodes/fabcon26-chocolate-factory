@@ -6,6 +6,7 @@ requires-python = ">=3.11"
 dependencies = [
     "azure-eventhub>=5.11",
     "azure-identity>=1.15",
+    "rich>=13.7",
 ]
 
 [dependency-groups]

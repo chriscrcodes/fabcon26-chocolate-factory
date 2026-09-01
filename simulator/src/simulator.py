@@ -17,6 +17,7 @@ import argparse
 import csv
 import os
 import random
+import sys
 import time
 import uuid
 from collections.abc import Callable
@@ -24,6 +25,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from dashboard import MissionControlDashboard, load_factory_lookup, load_line_lookup
 from event_hub_service import EventHubService
 from stage_catalog import StageDefinition, get_stages
 
@@ -71,6 +73,7 @@ class Simulator:
     interval_seconds: float
     anomaly_rate: float
     downtime_rate: float = 0.0
+    tables_dir: Path | None = None
     clock: Callable[[], datetime] = field(default=lambda: datetime.now(UTC))
     events_sent: int = field(default=0)
 
@@ -187,7 +190,13 @@ class Simulator:
 
         return payloads
 
-    def run(self, max_runtime_seconds: int = None) -> None:
+    def run(self, max_runtime_seconds: int = None, plain: bool = False) -> None:
+        if plain or not sys.stdout.isatty():
+            self._run_plain(max_runtime_seconds)
+        else:
+            self._run_dashboard(max_runtime_seconds)
+
+    def _run_plain(self, max_runtime_seconds: int = None) -> None:
         start = time.time()
         print(
             f"streaming telemetry for {len(self.lines)} lines "
@@ -213,6 +222,47 @@ class Simulator:
                 time.sleep(self.interval_seconds)
         except KeyboardInterrupt:
             print("\nstopped by user")
+        finally:
+            self.event_hub.close()
+
+    def _run_dashboard(self, max_runtime_seconds: int = None) -> None:
+        from rich.live import Live
+
+        tables_dir = self.tables_dir or (
+            Path(__file__).resolve().parents[2] / "fabric" / "ontology" / "tables"
+        )
+        dashboard = MissionControlDashboard(
+            factories=load_factory_lookup(tables_dir),
+            lines_meta=load_line_lookup(tables_dir),
+            stages=STAGES,
+        )
+
+        start = time.time()
+        try:
+            with Live(
+                dashboard.render(0, self.interval_seconds, self.lines),
+                console=dashboard.console,
+                refresh_per_second=4,
+                screen=True,
+            ) as live:
+                while True:
+                    payloads = self.tick()
+                    self.event_hub.send_events(payloads)
+                    self.events_sent += len(payloads)
+                    dashboard.log_payloads(payloads)
+                    live.update(
+                        dashboard.render(
+                            self.events_sent, self.interval_seconds, self.lines
+                        )
+                    )
+
+                    elapsed = time.time() - start
+                    if max_runtime_seconds and elapsed >= max_runtime_seconds:
+                        break
+
+                    time.sleep(self.interval_seconds)
+        except KeyboardInterrupt:
+            pass
         finally:
             self.event_hub.close()
 
@@ -320,6 +370,7 @@ def build_simulator(
         interval_seconds=interval,
         anomaly_rate=anomaly_rate,
         downtime_rate=downtime_rate,
+        tables_dir=tables_dir,
     )
 
 
@@ -371,6 +422,12 @@ def main() -> None:
         "Mutually exclusive with --max-runtime.",
     )
     parser.add_argument(
+        "--plain",
+        action="store_true",
+        help="Plain scrolling text output instead of the live mission-control "
+        "dashboard (always used automatically when stdout isn't a terminal)",
+    )
+    parser.add_argument(
         "--backfill-batch-ticks",
         type=int,
         default=20,
@@ -395,7 +452,7 @@ def main() -> None:
     if args.backfill_hours:
         simulator.run_backfill(args.backfill_hours, args.backfill_batch_ticks)
     else:
-        simulator.run(max_runtime_seconds=args.max_runtime)
+        simulator.run(max_runtime_seconds=args.max_runtime, plain=args.plain)
 
 
 if __name__ == "__main__":
