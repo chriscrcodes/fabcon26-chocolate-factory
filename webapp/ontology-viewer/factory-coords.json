@@ -1,0 +1,7 @@
+{
+  "_note": "Manually authored public-knowledge coordinates (approximate city centers). Nothing in this repo's data provides factory lat/long -- see fabric/ontology/tables/factory.csv, which stops at City/Country/Region.",
+  "FAC-BCN": { "lat": 41.3874, "lon": 2.1686 },
+  "FAC-CHI": { "lat": 41.8781, "lon": -87.6298 },
+  "FAC-GRU": { "lat": -23.5505, "lon": -46.6333 },
+  "FAC-SIN": { "lat": 1.3521, "lon": 103.8198 }
+}

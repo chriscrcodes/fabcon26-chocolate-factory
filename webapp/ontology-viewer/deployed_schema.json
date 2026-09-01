@@ -1,0 +1,216 @@
+{
+  "item_id": "0cb78dd1-d916-4a7e-80b4-feba8382180a",
+  "entities": [
+    "Batch",
+    "BatchMaterialUsage",
+    "Customer",
+    "Factory",
+    "Inventory",
+    "Invoice",
+    "LineStatus",
+    "Material",
+    "OrderLine",
+    "Product",
+    "ProductionLine",
+    "ProductionStage",
+    "QualityCheck",
+    "Recipe",
+    "SalesOrder",
+    "SensorReadingConching",
+    "SensorReadingGrinding",
+    "SensorReadingMixingRefining",
+    "SensorReadingMoldingCooling",
+    "SensorReadingPackaging",
+    "SensorReadingTempering",
+    "Shipment",
+    "Supplier"
+  ],
+  "relationships": [
+    {
+      "name": "material_to_supplier",
+      "source": "Material",
+      "target": "Supplier",
+      "bound": true
+    },
+    {
+      "name": "reading_tempering_to_line",
+      "source": "SensorReadingTempering",
+      "target": "ProductionLine",
+      "bound": true
+    },
+    {
+      "name": "batch_to_recipe",
+      "source": "Batch",
+      "target": "Recipe",
+      "bound": false
+    },
+    {
+      "name": "reading_mixing_refining_to_batch",
+      "source": "SensorReadingMixingRefining",
+      "target": "Batch",
+      "bound": true
+    },
+    {
+      "name": "shipment_to_batch",
+      "source": "Shipment",
+      "target": "Batch",
+      "bound": true
+    },
+    {
+      "name": "line_status_to_line",
+      "source": "LineStatus",
+      "target": "ProductionLine",
+      "bound": true
+    },
+    {
+      "name": "invoice_to_order",
+      "source": "Invoice",
+      "target": "SalesOrder",
+      "bound": true
+    },
+    {
+      "name": "reading_grinding_to_line",
+      "source": "SensorReadingGrinding",
+      "target": "ProductionLine",
+      "bound": true
+    },
+    {
+      "name": "line_to_factory",
+      "source": "ProductionLine",
+      "target": "Factory",
+      "bound": true
+    },
+    {
+      "name": "inventory_to_material",
+      "source": "Inventory",
+      "target": "Material",
+      "bound": true
+    },
+    {
+      "name": "orderline_to_product",
+      "source": "OrderLine",
+      "target": "Product",
+      "bound": true
+    },
+    {
+      "name": "reading_molding_cooling_to_batch",
+      "source": "SensorReadingMoldingCooling",
+      "target": "Batch",
+      "bound": true
+    },
+    {
+      "name": "order_to_customer",
+      "source": "SalesOrder",
+      "target": "Customer",
+      "bound": true
+    },
+    {
+      "name": "reading_packaging_to_line",
+      "source": "SensorReadingPackaging",
+      "target": "ProductionLine",
+      "bound": true
+    },
+    {
+      "name": "reading_conching_to_batch",
+      "source": "SensorReadingConching",
+      "target": "Batch",
+      "bound": true
+    },
+    {
+      "name": "orderline_to_order",
+      "source": "OrderLine",
+      "target": "SalesOrder",
+      "bound": true
+    },
+    {
+      "name": "check_to_batch",
+      "source": "QualityCheck",
+      "target": "Batch",
+      "bound": true
+    },
+    {
+      "name": "batch_to_line",
+      "source": "Batch",
+      "target": "ProductionLine",
+      "bound": false
+    },
+    {
+      "name": "inventory_to_factory",
+      "source": "Inventory",
+      "target": "Factory",
+      "bound": true
+    },
+    {
+      "name": "reading_conching_to_line",
+      "source": "SensorReadingConching",
+      "target": "ProductionLine",
+      "bound": true
+    },
+    {
+      "name": "shipment_to_factory",
+      "source": "Shipment",
+      "target": "Factory",
+      "bound": true
+    },
+    {
+      "name": "check_to_line",
+      "source": "QualityCheck",
+      "target": "ProductionLine",
+      "bound": true
+    },
+    {
+      "name": "reading_grinding_to_batch",
+      "source": "SensorReadingGrinding",
+      "target": "Batch",
+      "bound": true
+    },
+    {
+      "name": "product_to_recipe",
+      "source": "Product",
+      "target": "Recipe",
+      "bound": true
+    },
+    {
+      "name": "reading_packaging_to_batch",
+      "source": "SensorReadingPackaging",
+      "target": "Batch",
+      "bound": true
+    },
+    {
+      "name": "reading_mixing_refining_to_line",
+      "source": "SensorReadingMixingRefining",
+      "target": "ProductionLine",
+      "bound": true
+    },
+    {
+      "name": "reading_molding_cooling_to_line",
+      "source": "SensorReadingMoldingCooling",
+      "target": "ProductionLine",
+      "bound": true
+    },
+    {
+      "name": "reading_tempering_to_batch",
+      "source": "SensorReadingTempering",
+      "target": "Batch",
+      "bound": true
+    },
+    {
+      "name": "check_to_stage",
+      "source": "QualityCheck",
+      "target": "ProductionStage",
+      "bound": true
+    },
+    {
+      "name": "usage_to_material",
+      "source": "BatchMaterialUsage",
+      "target": "Material",
+      "bound": true
+    },
+    {
+      "name": "usage_to_batch",
+      "source": "BatchMaterialUsage",
+      "target": "Batch",
+      "bound": true
+    }
+  ]
+}
