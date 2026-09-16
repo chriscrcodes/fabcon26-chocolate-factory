@@ -1,0 +1,7 @@
+StageId,Phase,Name,SequenceOrder
+grinding,Factory Processing,Grinding,1
+mixing_refining,Factory Processing,Mixing & Refining,2
+conching,Factory Processing,Conching,3
+tempering,Finishing,Tempering,4
+molding_cooling,Finishing,Molding & Cooling,5
+packaging,Finishing,Packaging,6

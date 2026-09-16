@@ -1,0 +1,57 @@
+{
+  "id": "1037120774950147665",
+  "dataBindingConfiguration": {
+    "dataBindingType": "TimeSeries",
+    "timestampColumnName": "Timestamp",
+    "propertyBindings": [
+      {
+        "sourceColumnName": "Timestamp",
+        "targetPropertyId": "765465029928695808"
+      },
+      {
+        "sourceColumnName": "LineId",
+        "targetPropertyId": "1039932003763487644"
+      },
+      {
+        "sourceColumnName": "LineName",
+        "targetPropertyId": "27311887331840885"
+      },
+      {
+        "sourceColumnName": "FactoryId",
+        "targetPropertyId": "46551963246150220"
+      },
+      {
+        "sourceColumnName": "FactoryCode",
+        "targetPropertyId": "438866591204824406"
+      },
+      {
+        "sourceColumnName": "StageId",
+        "targetPropertyId": "1054956331231267005"
+      },
+      {
+        "sourceColumnName": "BatchId",
+        "targetPropertyId": "1032615171331513752"
+      },
+      {
+        "sourceColumnName": "LineSpeedUnitsPerMin",
+        "targetPropertyId": "440225875439861766"
+      },
+      {
+        "sourceColumnName": "SealTemperatureC",
+        "targetPropertyId": "1077272114465108710"
+      },
+      {
+        "sourceColumnName": "RejectRatePercent",
+        "targetPropertyId": "983571026954303310"
+      }
+    ],
+    "sourceTableProperties": {
+      "sourceType": "KustoTable",
+      "workspaceId": "{{ .WorkspaceId }}",
+      "itemId": "{{ .EventhouseId }}",
+      "clusterUri": "{{ .ClusterUri }}",
+      "databaseName": "{{ .DatabaseName }}",
+      "sourceTableName": "silver_packaging"
+    }
+  }
+}

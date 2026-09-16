@@ -1,0 +1,21 @@
+{
+  "id": "913214382346031814",
+  "dataBindingTable": {
+    "sourceType": "LakehouseTable",
+    "workspaceId": "{{ .WorkspaceId }}",
+    "itemId": "{{ .LakehouseId }}",
+    "sourceTableName": "silver_tempering"
+  },
+  "sourceKeyRefBindings": [
+    {
+      "sourceColumnName": "LineId",
+      "targetPropertyId": "1015872119408526570"
+    }
+  ],
+  "targetKeyRefBindings": [
+    {
+      "sourceColumnName": "BatchId",
+      "targetPropertyId": "437529534197250178"
+    }
+  ]
+}

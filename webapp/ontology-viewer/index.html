@@ -1,0 +1,1088 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Chocolate Factory — Ontology Viewer</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23030507'/%3E%3Ccircle cx='16' cy='16' r='7' fill='%2333f0e0'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #030507;
+    --panel: #060a0e;
+    --grid: #0d1620;
+    --border: #1c2a35;
+    --border-bright: #2a4356;
+    --text: #d6e4ee;
+    --dim: #5f7a8c;
+    --accent: #33f0e0;
+    --accent-dim: #1a6e68;
+    --amber: #ffb020;
+    --mono: "JetBrains Mono", "SF Mono", "Berkeley Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font-family: var(--mono); overflow: hidden; }
+  #app { display: flex; flex-direction: column; height: 100%; position: relative; }
+
+  #app::before {
+    content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 0;
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 32px 32px;
+    mask-image: radial-gradient(ellipse at 50% 40%, black 0%, transparent 75%);
+  }
+
+  #loading-overlay { position: absolute; inset: 0; z-index: 50; background: var(--bg);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.8rem; }
+  #loading-overlay.hidden { display: none; }
+  #loading-overlay .ring { width: 34px; height: 34px; border-radius: 50%;
+    border: 2px solid var(--border-bright); border-top-color: var(--accent);
+    animation: spin 0.9s linear infinite; }
+  #loading-overlay p { font-size: 0.72rem; letter-spacing: 0.16em; color: var(--dim); text-transform: uppercase; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  header { position: relative; z-index: 1; display: flex; align-items: center; gap: 1.25rem;
+    padding: 0.7rem 1.25rem; border-bottom: 1px solid var(--border); background: var(--panel);
+    flex-shrink: 0; flex-wrap: wrap; }
+  .brand { display: flex; align-items: center; gap: 0.6rem; }
+  .brand .mark { width: 9px; height: 9px; border-radius: 50%; background: var(--accent);
+    box-shadow: 0 0 8px 2px var(--accent); animation: pulse 2.2s ease-in-out infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+  header h1 { font-size: 0.8rem; margin: 0; font-weight: 600; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--text); }
+  header h1 span { color: var(--dim); font-weight: 400; }
+
+  .tabs { display: flex; gap: 0.4rem; margin-left: 0.5rem; }
+  .tabs button { background: transparent; border: 1px solid var(--border); color: var(--dim);
+    padding: 0.4rem 0.85rem; cursor: pointer; font-family: var(--mono); font-size: 0.68rem;
+    letter-spacing: 0.08em; text-transform: uppercase; clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px); }
+  .tabs button:hover { border-color: var(--border-bright); color: var(--text); }
+  .tabs button.active { color: var(--bg); background: var(--accent); border-color: var(--accent); font-weight: 700; }
+
+  #search { background: var(--grid); border: 1px solid var(--border); color: var(--text);
+    font-family: var(--mono); font-size: 0.7rem; padding: 0.4rem 0.7rem; width: 160px;
+    letter-spacing: 0.03em; }
+  #search::placeholder { color: var(--dim); }
+  #search:focus { outline: none; border-color: var(--accent); }
+
+  .stats-badges { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+  .stat-badge { font-size: 0.62rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--dim);
+    border: 1px solid var(--border); padding: 0.25rem 0.55rem; }
+  .stat-badge b { color: var(--text); }
+
+  .domains { display: flex; gap: 0.5rem; margin-left: auto; }
+  .domain-toggle { display: flex; align-items: center; gap: 0.45rem; padding: 0.3rem 0.65rem;
+    border: 1px solid var(--border); cursor: pointer; font-size: 0.65rem; letter-spacing: 0.06em;
+    text-transform: uppercase; color: var(--dim); user-select: none; }
+  .domain-toggle.active { color: var(--text); border-color: currentColor; }
+  .domain-toggle .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .domain-toggle.active .dot { box-shadow: 0 0 6px 1px currentColor; }
+
+  main { position: relative; z-index: 1; flex: 1; display: flex; min-height: 0; }
+  #graph { flex: 1; position: relative; }
+  #graph svg { width: 100%; height: 100%; display: block; cursor: crosshair; }
+  .corner { position: absolute; width: 18px; height: 18px; border: 1px solid var(--border-bright);
+    opacity: 0.7; pointer-events: none; z-index: 2; }
+  .corner.tl { top: 10px; left: 10px; border-right: none; border-bottom: none; }
+  .corner.tr { top: 10px; right: 10px; border-left: none; border-bottom: none; }
+  .corner.bl { bottom: 10px; left: 10px; border-right: none; border-top: none; }
+  .corner.br { bottom: 10px; right: 10px; border-left: none; border-top: none; }
+
+  aside { width: 340px; border-left: 1px solid var(--border); background: var(--panel);
+    padding: 1.1rem; overflow-y: auto; flex-shrink: 0; display: flex; flex-direction: column; gap: 1.1rem; }
+  aside .eyebrow { font-size: 0.65rem; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--dim); margin: 0 0 0.6rem; }
+  aside h2 { font-size: 0.95rem; margin: 0 0 0.9rem; font-weight: 600; letter-spacing: 0.02em; }
+  aside .hint { color: var(--dim); font-size: 0.76rem; line-height: 1.6; }
+  aside .hint code { color: var(--text); background: var(--grid); padding: 0.05rem 0.3rem; }
+  aside table { width: 100%; border-collapse: collapse; font-size: 0.72rem; margin-top: 0.5rem; }
+  aside td { padding: 0.3rem 0; border-bottom: 1px solid var(--border); vertical-align: top; }
+  aside td:first-child { color: var(--dim); width: 42%; padding-right: 0.5rem; text-transform: uppercase;
+    letter-spacing: 0.04em; font-size: 0.65rem; }
+  aside .badge { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.2rem 0.6rem;
+    font-size: 0.62rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+    margin-bottom: 0.7rem; border: 1px solid currentColor; }
+  aside .callout { padding: 0.8rem; background: var(--grid);
+    border: 1px solid var(--border); border-left: 2px solid var(--accent); font-size: 0.76rem;
+    line-height: 1.6; color: var(--dim); }
+  aside .callout b { color: var(--accent); }
+  aside .callout code { color: var(--text); }
+  aside .type-tag { color: var(--dim); font-size: 0.6rem; text-transform: none; }
+  .enter-btn { margin-top: 1rem; width: 100%; background: var(--accent-dim); color: var(--text);
+    border: 1px solid var(--accent); padding: 0.6rem; font-family: var(--mono); font-size: 0.7rem;
+    letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; }
+  .enter-btn:hover { background: var(--accent); color: var(--bg); font-weight: 700; }
+
+  .legend { border-top: 1px solid var(--border); padding-top: 1rem; }
+  .legend-row { display: flex; align-items: center; gap: 0.5rem; font-size: 0.7rem; color: var(--dim);
+    margin-bottom: 0.45rem; }
+  .legend .swatch { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .legend .line { width: 18px; height: 0; border-top: 1.6px solid var(--accent); flex-shrink: 0; }
+  .legend .line.dashed { border-top-style: dashed; border-top-color: var(--dim); }
+
+  .demo-panel { border-top: 1px solid var(--border); padding-top: 1rem; }
+  .demo-btn { display: block; width: 100%; text-align: left; background: var(--grid);
+    border: 1px solid var(--border); color: var(--text); font-family: var(--mono); font-size: 0.68rem;
+    line-height: 1.4; padding: 0.55rem 0.7rem; margin-bottom: 0.5rem; cursor: pointer; }
+  .demo-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .demo-btn.clear { color: var(--dim); text-align: center; text-transform: uppercase; letter-spacing: 0.06em; }
+
+  .node circle { stroke: var(--bg); stroke-width: 2px; cursor: pointer; }
+  .node text { fill: var(--text); font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.02em;
+    pointer-events: none; text-transform: uppercase; }
+  .node.dimmed circle { opacity: 0.12; }
+  .node.dimmed text { opacity: 0.12; }
+  .link { stroke: #2a3844; stroke-width: 1px; cursor: pointer; }
+  .link.hub { stroke: var(--accent); stroke-width: 1.6px; opacity: 0.85;
+    stroke-dasharray: 4 6; animation: hubflow 1.1s linear infinite; }
+  @keyframes hubflow { to { stroke-dashoffset: -20; } }
+  .link.unbound { stroke-dasharray: 2 3; animation: none; }
+  /* must come after .hub/.unbound: same specificity, dimmed has to win the cascade */
+  .link.dimmed { opacity: 0.06 !important; animation: none !important; }
+
+  #map { flex: 1; position: relative; display: none; }
+  #map-canvas { width: 100%; height: 100%; }
+  #map-canvas svg { width: 100%; height: 100%; display: block; cursor: grab; }
+  #map-canvas svg:active { cursor: grabbing; }
+  .map-pin circle { filter: drop-shadow(0 0 4px var(--accent)); }
+  .map-label { fill: var(--text); font-size: 10px; font-family: var(--mono); pointer-events: none;
+    text-transform: uppercase; letter-spacing: 0.04em; }
+  .breadcrumb { position: absolute; top: 14px; left: 14px; z-index: 2; display: flex; gap: 0.4rem;
+    align-items: center; font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; }
+  .breadcrumb span[data-crumb] { color: var(--dim); cursor: pointer; }
+  .breadcrumb span[data-crumb]:hover { color: var(--accent); }
+  .breadcrumb .current { color: var(--accent); }
+  .breadcrumb .sep { color: var(--border-bright); }
+  .map-hint { position: absolute; bottom: 14px; left: 14px; z-index: 2; font-size: 0.65rem;
+    color: var(--dim); letter-spacing: 0.04em; text-transform: uppercase; }
+  .back-to-globe { position: absolute; top: 12px; right: 14px; z-index: 2; display: none;
+    background: var(--panel); border: 1px solid var(--accent); color: var(--accent);
+    font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase;
+    padding: 0.4rem 0.8rem; cursor: pointer; }
+  .back-to-globe.visible { display: block; }
+  .back-to-globe:hover { background: var(--accent); color: var(--bg); font-weight: 700; }
+
+  #map-interior { display: none; position: absolute; inset: 0; z-index: 3; background: var(--bg);
+    padding: 3.2rem 2rem 2rem; overflow-y: auto; }
+  #map-interior .back { background: transparent; border: 1px solid var(--border); color: var(--dim);
+    font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase;
+    padding: 0.4rem 0.85rem; cursor: pointer; margin-bottom: 1.2rem; }
+  #map-interior .back:hover { border-color: var(--accent); color: var(--accent); }
+  #map-interior h2 { font-size: 1.1rem; margin: 0.2rem 0 0; }
+  .floor-header { display: flex; align-items: flex-end; justify-content: space-between;
+    gap: 1rem; margin-bottom: 1.4rem; flex-wrap: wrap; }
+  .sim-toggle { background: var(--grid); border: 1px solid var(--border-bright); color: var(--dim);
+    font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase;
+    padding: 0.45rem 0.9rem; cursor: pointer; flex-shrink: 0; }
+  .sim-toggle.on { color: var(--accent); border-color: var(--accent); }
+  .sim-toggle:hover { background: var(--accent); color: var(--bg); font-weight: 700; }
+
+  /* ---- Simulated factory floor: one dedicated rig per stage, strung along
+     a single production line -- futuristic control-room look, recognizably
+     real machines (mill, vat, drum, tank, tunnel, arm). ---- */
+  .floor { position: relative; padding: 1.6rem; background: var(--panel); border: 1px solid var(--border); }
+
+  /* Boustrophedon (snake) layout: stage 1-2-3 run left-to-right along the
+     top row, 3 drops down to 4, then 4-5-6 run right-to-left along the
+     bottom row -- a schematic assembly-line reading order that fills the
+     available width edge-to-edge instead of one wide scrolling row. */
+  .snake-grid { display: grid; grid-template-columns: 1fr 34px 1fr 34px 1fr;
+    grid-template-rows: auto 34px auto; align-items: stretch; }
+
+  .arrow { display: flex; align-items: center; justify-content: center;
+    color: var(--accent); font-size: 1.3rem; text-shadow: 0 0 6px var(--accent-dim);
+    animation: arrowpulse 1.6s ease-in-out infinite; }
+  .arrow.right::after { content: "▸"; }
+  .arrow.left::after { content: "◂"; }
+  .arrow.down::after { content: "▾"; }
+  .arrow.paused { animation: none; opacity: .25; text-shadow: none; }
+  @keyframes arrowpulse { 0%, 100% { opacity: .65; transform: scale(1); } 50% { opacity: 1; transform: scale(1.3); } }
+
+  .stage-card { position: relative; background: #060a0e; border: 1px solid var(--border);
+    padding: 0.85rem 1rem 1rem; display: flex; flex-direction: column; gap: 0.7rem; min-width: 0; }
+  .stage-card::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, var(--accent-dim), var(--accent), var(--accent-dim)); }
+  .card-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+  .card-head .step { display: flex; align-items: baseline; gap: 0.5rem; min-width: 0; }
+  .card-head .step b { color: var(--accent); font-size: 0.92rem; flex-shrink: 0; }
+  .card-head .step em { font-style: normal; font-size: 0.7rem; letter-spacing: 0.03em; text-transform: uppercase;
+    color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .card-status { display: flex; align-items: center; gap: 0.35rem; font-size: 0.56rem; letter-spacing: 0.06em;
+    text-transform: uppercase; color: var(--dim); flex-shrink: 0; }
+  .card-status .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--border-bright); }
+  .card-status .dot.live { background: var(--accent); box-shadow: 0 0 4px var(--accent); animation: dotpulse 1.4s ease-in-out infinite; }
+  .card-body { display: flex; align-items: flex-end; gap: 0.9rem; }
+  .rig { width: 104px; height: 88px; position: relative; display: flex; align-items: flex-end;
+    justify-content: center; flex-shrink: 0; }
+
+  .telemetry { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px;
+    background: var(--grid); border: 1px solid var(--border); padding: 6px 9px; }
+  .t-row { display: flex; align-items: center; gap: 6px; font-size: 0.58rem; letter-spacing: 0.02em; white-space: nowrap; }
+  .t-dot { width: 4px; height: 4px; border-radius: 50%; background: var(--border-bright); flex-shrink: 0; }
+  .t-dot.live { background: var(--accent); box-shadow: 0 0 4px var(--accent); animation: dotpulse 1.4s ease-in-out infinite; }
+  .t-label { color: var(--dim); text-transform: uppercase; flex: 1; overflow: hidden; text-overflow: ellipsis; }
+  .t-val { color: var(--text); font-weight: 700; min-width: 30px; text-align: right; }
+  .t-val.flash { animation: valflash .5s ease-out; }
+  .t-unit { color: var(--dim); font-size: 0.52rem; min-width: 28px; }
+  @keyframes dotpulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
+  @keyframes valflash { 0% { color: var(--accent); text-shadow: 0 0 6px var(--accent); } 100% { color: var(--text); text-shadow: none; } }
+
+  /* 1 grinding -- twin counter-rotating millstones */
+  .rig.grind { gap: 4px; padding-bottom: 8px; }
+  .rig.grind .wheel { width: 46px; height: 46px; border-radius: 50%; border: 2px solid var(--border-bright);
+    background: radial-gradient(circle at 35% 32%, #445667, #10161b 72%); position: relative; }
+  .rig.grind .wheel::before { content: ""; position: absolute; inset: 5px; border-radius: 50%;
+    background: repeating-conic-gradient(#0a0f14 0deg 8deg, #1c2a35 8deg 16deg); }
+  .rig.grind .wheel.a { animation: spin 2.1s linear infinite; }
+  .rig.grind .wheel.b { animation: spin 2.5s linear infinite reverse; }
+
+  /* 2 mixing & refining -- swirling vat */
+  .rig.mix .vat { width: 66px; height: 84px; border-radius: 10px 10px 26px 26px; border: 2px solid var(--border-bright);
+    background: #0a1218; position: relative; overflow: hidden; padding-bottom: 6px; }
+  .rig.mix .liquid { position: absolute; left: 5px; right: 5px; bottom: 5px; height: 58%; border-radius: 0 0 20px 20px;
+    background: conic-gradient(from 0deg, #6b3a1c, #a5522a, #6b3a1c, #a5522a); animation: spin 3.2s linear infinite; }
+  .rig.mix .sheen { position: absolute; inset: 0; background: radial-gradient(circle at 30% 18%, rgba(255,255,255,.12), transparent 55%); }
+
+  /* 3 conching -- long rolling drum with rising steam */
+  .rig.conch .drum { width: 92px; height: 40px; border-radius: 20px; border: 2px solid var(--border-bright);
+    background: repeating-linear-gradient(100deg, #3a2415 0 10px, #201409 10px 20px); background-size: 200% 100%;
+    animation: shift 2s linear infinite; position: relative; }
+  .rig.conch .steam { position: absolute; top: -26px; left: 0; right: 0; height: 26px; }
+  .rig.conch .steam span { position: absolute; bottom: 0; width: 6px; height: 6px; border-radius: 50%;
+    background: rgba(214, 228, 238, .55); filter: blur(0.5px); animation: steam 2.6s ease-in infinite; }
+  .rig.conch .steam span:nth-child(1) { left: 20px; animation-delay: 0s; }
+  .rig.conch .steam span:nth-child(2) { left: 50px; animation-delay: .9s; }
+  .rig.conch .steam span:nth-child(3) { left: 78px; animation-delay: 1.7s; }
+
+  /* 4 tempering -- glass tank with rising/falling level + temp ticks */
+  .rig.temper .tank-wrap { position: relative; }
+  .rig.temper .tank { width: 38px; height: 88px; border: 2px solid var(--border-bright); border-radius: 8px;
+    background: linear-gradient(180deg, rgba(51,240,224,.05), rgba(51,240,224,0)); position: relative; overflow: hidden; }
+  .rig.temper .level { position: absolute; left: 3px; right: 3px; bottom: 3px; border-radius: 0 0 4px 4px;
+    background: linear-gradient(180deg, #ffce6b, var(--amber)); animation: rise 2.3s ease-in-out infinite alternate; }
+  .rig.temper .ticks { position: absolute; right: -9px; top: 4px; bottom: 4px; display: flex;
+    flex-direction: column; justify-content: space-between; }
+  .rig.temper .ticks span { width: 6px; height: 1px; background: var(--border-bright); }
+
+  /* 5 molding & cooling -- misty tunnel with bar trays moving through */
+  .rig.mold .tunnel { width: 104px; height: 48px; border-radius: 8px; border: 2px solid var(--border-bright);
+    background: linear-gradient(90deg, #0a1a22, #123241, #0a1a22); position: relative; overflow: hidden; }
+  .rig.mold .tunnel::before { content: ""; position: absolute; inset: 0;
+    background: repeating-linear-gradient(90deg, rgba(160,220,255,.06) 0 2px, transparent 2px 14px);
+    animation: shift 1.1s linear infinite; }
+  .rig.mold .bar { position: absolute; top: 50%; width: 16px; height: 9px; margin-top: -4.5px; border-radius: 2px;
+    background: #6b4a2c; border: 1px solid #3a2415; animation: trayflow 2.6s linear infinite; }
+  .rig.mold .bar:nth-child(2) { animation-delay: -.9s; }
+  .rig.mold .bar:nth-child(3) { animation-delay: -1.8s; }
+
+  /* 6 packaging -- pick-arm placing crates on an outbound belt */
+  .rig.pack { width: 104px; height: 88px; }
+  .rig.pack .arm { position: absolute; top: 6px; left: 50%; width: 5px; height: 30px; margin-left: -2.5px;
+    background: var(--border-bright); transform-origin: top center; animation: armswing 1.6s ease-in-out infinite; }
+  .rig.pack .arm::after { content: ""; position: absolute; bottom: -7px; left: -6px; width: 17px; height: 9px;
+    background: var(--accent); border-radius: 2px; box-shadow: 0 0 5px var(--accent); }
+  .rig.pack .obelt { position: absolute; bottom: 14px; left: 4px; right: 4px; height: 3px; background: var(--border-bright); }
+  .rig.pack .crate { position: absolute; bottom: 17px; width: 13px; height: 11px; background: #6b4a2c;
+    border: 1px solid #3a2415; animation: cratemove 1.6s linear infinite; }
+  .rig.pack .stack { position: absolute; bottom: 17px; right: 8px; width: 13px; height: 11px; background: #4a3016;
+    border: 1px solid #3a2415; box-shadow: 0 -12px 0 -1px #4a3016, 0 -24px 0 -1px #4a3016; }
+
+  @keyframes shift { to { background-position: -100% 0; } }
+  @keyframes rise { from { height: 22%; } to { height: 76%; } }
+  @keyframes steam { 0% { transform: translateY(0) scale(1); opacity: .7; } 100% { transform: translateY(-22px) scale(1.8); opacity: 0; } }
+  @keyframes trayflow { 0% { left: -18px; } 100% { left: 104px; } }
+  @keyframes armswing { 0%, 100% { transform: rotate(-18deg); } 50% { transform: rotate(18deg); } }
+  @keyframes cratemove { 0% { left: 4px; } 100% { left: 82px; } }
+
+  footer { position: relative; z-index: 1; display: flex; align-items: center; gap: 1.5rem;
+    padding: 0.4rem 1.25rem; border-top: 1px solid var(--border); background: var(--panel);
+    color: var(--dim); font-size: 0.68rem; letter-spacing: 0.03em; flex-shrink: 0; }
+  footer .live { color: var(--accent); }
+  footer .sep { color: var(--border-bright); }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="loading-overlay"><div class="ring"></div><p>Initializing…</p></div>
+  <header>
+    <div class="brand">
+      <span class="mark"></span>
+      <h1>🍫 CHOCOLATE FACTORY <span>// ONTOLOGY VIEWER</span></h1>
+    </div>
+    <div class="tabs">
+      <button id="tab-schema" class="active">SCHEMA</button>
+      <button id="tab-instances">INSTANCES</button>
+      <button id="tab-map">MAP</button>
+    </div>
+    <input type="text" id="search" placeholder="search node…">
+    <div class="stats-badges" id="stats-badges"></div>
+    <div class="domains" id="domain-toggles"></div>
+  </header>
+  <main>
+    <div id="graph">
+      <div class="corner tl"></div><div class="corner tr"></div>
+      <div class="corner bl"></div><div class="corner br"></div>
+    </div>
+    <div id="map">
+      <div class="corner tl"></div><div class="corner tr"></div>
+      <div class="corner bl"></div><div class="corner br"></div>
+      <div class="breadcrumb" id="map-breadcrumb"></div>
+      <button class="back-to-globe" id="back-to-globe">🌐 BACK TO GLOBE</button>
+      <div class="map-hint">drag to rotate · scroll to zoom · click a pin to zoom in</div>
+      <div id="map-canvas"></div>
+      <div id="map-interior"></div>
+    </div>
+    <aside>
+      <div id="inspector-content">
+        <p class="eyebrow">Inspector</p>
+        <h2>Select a node</h2>
+        <p class="hint">
+          Click any node to see its properties · click an edge for the relationship detail.
+          Click again to clear. Drag to rearrange · scroll to zoom.
+          <br><br>
+          <span id="schema-source-note"></span>
+        </p>
+        <div class="callout">
+          <b>Factory is the only hub.</b> Supply Chain and Orders never connect directly —
+          every cross-domain path routes through <code>Factory</code> or
+          <code>Product</code> / <code>Recipe</code>. Toggle domains off above to see it.
+          Dashed edges are defined but not yet Contextualization-bound.
+        </div>
+      </div>
+      <div class="legend" id="legend"></div>
+      <div class="demo-panel" id="demo-panel">
+        <p class="eyebrow">Verified demo paths</p>
+        <button class="demo-btn" data-demo="suppliers">Who are our suppliers, and what do they supply?</button>
+        <button class="demo-btn" data-demo="centerpiece">Worst quality this week — enough inventory of its key material?</button>
+        <button class="demo-btn clear" data-demo="clear">clear highlight</button>
+      </div>
+    </aside>
+  </main>
+  <footer id="status"><span class="live">● LIVE</span><span class="sep">|</span>loading graph-data.json…</footer>
+</div>
+
+<script src="vendor/d3.v7.min.js"></script>
+<script src="vendor/topojson-client.min.js"></script>
+<script>
+const DEFAULT_INSPECTOR_HTML = document.getElementById("inspector-content").innerHTML;
+
+const svg = d3.select("#graph").append("svg");
+const defs = svg.append("defs");
+const glow = defs.append("filter").attr("id", "glow").attr("x", "-60%").attr("y", "-60%").attr("width", "220%").attr("height", "220%");
+glow.append("feGaussianBlur").attr("stdDeviation", 2.5).attr("result", "blur");
+glow.append("feMerge").selectAll("feMergeNode")
+  .data(["blur", "SourceGraphic"]).join("feMergeNode").attr("in", d => d);
+
+const zoomLayer = svg.append("g");
+let width, height;
+
+function resize() {
+  const rect = document.getElementById("graph").getBoundingClientRect();
+  width = rect.width; height = rect.height;
+  svg.attr("viewBox", [0, 0, width, height]);
+}
+window.addEventListener("resize", () => { if (currentView !== "map") resize(); else redrawMapIfReady(); });
+
+svg.call(d3.zoom().scaleExtent([0.2, 4]).on("zoom", (event) => {
+  zoomLayer.attr("transform", event.transform);
+}));
+svg.on("click", () => clearSelection());
+
+let currentView = "schema";
+let activeDomains = null; // null = all
+let searchTerm = "";
+let selectedNodeId = null;
+let neighborSet = null; // Set of node ids kept undimmed (ego-highlight)
+let demoEdgeIds = null; // Set of exact edge ids kept undimmed (demo path) -- takes priority over neighborSet
+let demoNodeIds = null; // Set of node ids derived from demoEdgeIds' endpoints
+let data = null;
+let simulation = null;
+let currentLinks = [];
+
+const HUB_LABELS = { schema: new Set(["Factory", "Product", "Recipe"]), instances: new Set(["factory", "product", "recipe"]) };
+
+function hubMatch(id) {
+  const hubs = HUB_LABELS[currentView];
+  if (!hubs) return false;
+  return [...hubs].some(h => id === h || id.startsWith(h + ":"));
+}
+
+function domainList(view) {
+  const nodes = data[view].nodes;
+  const seen = new Map();
+  nodes.forEach(n => { if (!seen.has(n.domain)) seen.set(n.domain, n.color); });
+  return [...seen.entries()].map(([domain, color]) => ({ domain, color }));
+}
+
+function renderDomainToggles() {
+  const container = document.getElementById("domain-toggles");
+  container.innerHTML = "";
+  domainList(currentView).forEach(({ domain, color }) => {
+    const el = document.createElement("div");
+    const isActive = activeDomains === null || activeDomains.has(domain);
+    el.className = "domain-toggle" + (isActive ? " active" : "");
+    el.style.color = isActive ? color : "";
+    el.innerHTML = `<span class="dot"></span>${domain}`;
+    el.addEventListener("click", () => {
+      if (activeDomains === null) {
+        activeDomains = new Set(domainList(currentView).map(d => d.domain));
+      }
+      if (activeDomains.has(domain)) activeDomains.delete(domain);
+      else activeDomains.add(domain);
+      if (activeDomains.size === domainList(currentView).length) activeDomains = null;
+      renderDomainToggles();
+      updateFilterHighlight();
+    });
+    container.appendChild(el);
+  });
+}
+
+function isDomainDimmed(domain) {
+  return activeDomains !== null && !activeDomains.has(domain);
+}
+
+function isNodeDimmed(d) {
+  if (demoEdgeIds) {
+    // Demo mode: a node stays lit only if it's an endpoint of a lit edge,
+    // or has no edges in this view at all (never true for our demo sets,
+    // but keeps the function correct in general).
+    return !demoNodeIds.has(d.id);
+  }
+  if (isDomainDimmed(d.domain)) return true;
+  if (searchTerm && !d.label.toLowerCase().includes(searchTerm)) return true;
+  if (neighborSet && !neighborSet.has(d.id)) return true;
+  return false;
+}
+
+function isLinkDimmed(d) {
+  if (demoEdgeIds) return !demoEdgeIds.has(d.id);
+  const s = d.source, t = d.target;
+  const sId = s.id ?? s, tId = t.id ?? t;
+  const sDomain = s.domain, tDomain = t.domain;
+  if (isDomainDimmed(sDomain) || isDomainDimmed(tDomain)) return true;
+  if (searchTerm) {
+    const sLabel = (s.label || "").toLowerCase(), tLabel = (t.label || "").toLowerCase();
+    if (!sLabel.includes(searchTerm) && !tLabel.includes(searchTerm)) return true;
+  }
+  if (neighborSet && !(neighborSet.has(sId) && neighborSet.has(tId))) return true;
+  return false;
+}
+
+function updateFilterHighlight() {
+  zoomLayer.selectAll(".node").classed("dimmed", isNodeDimmed);
+  zoomLayer.selectAll(".link").classed("dimmed", isLinkDimmed);
+}
+
+function clearSelection() {
+  if (selectedNodeId === null && neighborSet === null && demoEdgeIds === null) return;
+  selectedNodeId = null;
+  neighborSet = null;
+  demoEdgeIds = null;
+  demoNodeIds = null;
+  updateFilterHighlight();
+}
+
+function showInspector(d) {
+  const el = document.getElementById("inspector-content");
+  let rows = "";
+  if (currentView === "schema") {
+    rows = (d.columns || []).map(c =>
+      `<tr><td>${c}${c === d.key ? " 🔑" : ""}</td><td class="type-tag">${(d.types || {})[c] || ""}</td></tr>`
+    ).join("");
+  } else {
+    rows = Object.entries(d.properties || {}).map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join("");
+  }
+  const notes = d.notes ? `<div class="callout" style="margin-top:0.8rem">${d.notes}</div>` : "";
+  el.innerHTML = `
+    <p class="eyebrow">Inspector · Entity</p>
+    <span class="badge" style="color:${d.color}">${d.domain}</span>
+    <h2>${d.icon || ""} ${d.label}</h2>
+    <table>${rows}</table>
+    ${notes}
+  `;
+}
+
+function showEdgeInspector(d) {
+  const el = document.getElementById("inspector-content");
+  const s = d.source.label || d.source, t = d.target.label || d.target;
+  el.innerHTML = `
+    <p class="eyebrow">Inspector · Relationship</p>
+    <span class="badge" style="color:${d.bound === false ? 'var(--dim)' : 'var(--accent)'}">
+      ${d.bound === false ? "unbound" : "bound"}
+    </span>
+    <h2>${d.label}</h2>
+    <table>
+      <tr><td>Source</td><td>${s}</td></tr>
+      <tr><td>Target</td><td>${t}</td></tr>
+      <tr><td>From key</td><td>${d.fromKey || "—"}</td></tr>
+      <tr><td>To key</td><td>${d.toKey || "—"}</td></tr>
+    </table>
+  `;
+}
+
+function renderLegend() {
+  const el = document.getElementById("legend");
+  const domains = domainList(currentView === "map" ? "schema" : currentView);
+  el.innerHTML = `
+    <p class="eyebrow">Legend</p>
+    ${domains.map(d => `<div class="legend-row"><span class="swatch" style="background:${d.color}"></span>${d.domain}</div>`).join("")}
+    <div class="legend-row"><span class="line"></span>Hub edge (Factory / Product / Recipe)</div>
+    <div class="legend-row"><span class="line dashed"></span>Defined, not yet bound</div>
+    <div class="legend-row">Node size ∝ number of connections</div>
+  `;
+}
+
+function renderGraph() {
+  resize();
+  zoomLayer.selectAll("*").remove();
+  if (simulation) simulation.stop();
+
+  const graph = data[currentView];
+  const nodes = graph.nodes.map(n => ({ ...n }));
+  const nodeById = new Map(nodes.map(n => [n.id, n]));
+  const links = graph.edges
+    .filter(e => nodeById.has(e.source) && nodeById.has(e.target))
+    .map(e => ({ ...e }));
+  currentLinks = links;
+
+  const degree = new Map(nodes.map(n => [n.id, 0]));
+  links.forEach(l => {
+    degree.set(l.source, (degree.get(l.source) || 0) + 1);
+    degree.set(l.target, (degree.get(l.target) || 0) + 1);
+  });
+
+  const baseRadius = currentView === "schema" ? 13 : 5;
+  const degreeScale = currentView === "schema" ? 2.4 : 1.1;
+  const radiusOf = d => baseRadius + Math.sqrt(degree.get(d.id) || 0) * degreeScale;
+
+  const linkSel = zoomLayer.append("g").selectAll("line")
+    .data(links).join("line")
+    .attr("class", d => "link"
+      + (currentView === "schema" && (hubMatch(d.source) || hubMatch(d.target)) ? " hub" : "")
+      + (d.bound === false ? " unbound" : ""))
+    .on("click", (event, d) => { event.stopPropagation(); showEdgeInspector(d); });
+
+  const nodeSel = zoomLayer.append("g").selectAll("g")
+    .data(nodes).join("g")
+    .attr("class", "node")
+    .call(d3.drag()
+      .on("start", (event, d) => { if (!event.active) simulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+      .on("drag", (event, d) => { d.fx = event.x; d.fy = event.y; })
+      .on("end", (event, d) => { if (!event.active) simulation.alphaTarget(0); d.fx = null; d.fy = null; }))
+    .on("click", (event, d) => {
+      event.stopPropagation();
+      showInspector(d);
+      demoEdgeIds = null;
+      demoNodeIds = null;
+      if (selectedNodeId === d.id) {
+        selectedNodeId = null;
+        neighborSet = null;
+      } else {
+        selectedNodeId = d.id;
+        const set = new Set([d.id]);
+        currentLinks.forEach(l => {
+          const sId = l.source.id ?? l.source, tId = l.target.id ?? l.target;
+          if (sId === d.id) set.add(tId);
+          if (tId === d.id) set.add(sId);
+        });
+        neighborSet = set;
+      }
+      updateFilterHighlight();
+    });
+
+  nodeSel.append("circle").attr("r", radiusOf).attr("fill", d => d.color).attr("filter", "url(#glow)");
+  nodeSel.append("circle").attr("r", d => radiusOf(d) * 0.4).attr("fill", "#03050799");
+  nodeSel.append("text").attr("x", d => radiusOf(d) + 5).attr("y", 4).text(d => d.label);
+
+  simulation = d3.forceSimulation(nodes)
+    .force("link", d3.forceLink(links).id(d => d.id).distance(currentView === "schema" ? 150 : 60).strength(0.4))
+    .force("charge", d3.forceManyBody().strength(currentView === "schema" ? -420 : -60))
+    .force("center", d3.forceCenter(width / 2, height / 2))
+    .force("collide", d3.forceCollide(d => radiusOf(d) * 1.7))
+    .on("tick", () => {
+      linkSel
+        .attr("x1", d => d.source.x).attr("y1", d => d.source.y)
+        .attr("x2", d => d.target.x).attr("y2", d => d.target.y);
+      nodeSel.attr("transform", d => `translate(${d.x},${d.y})`);
+    });
+
+  updateFilterHighlight();
+  renderLegend();
+  document.getElementById("status").innerHTML =
+    `<span class="live">● LIVE</span><span class="sep">|</span>${data.scenario.toUpperCase()}` +
+    `<span class="sep">|</span>${currentView.toUpperCase()} VIEW: ${nodes.length} NODES, ${links.length} EDGES`;
+}
+
+function renderStatsBadges() {
+  const el = document.getElementById("stats-badges");
+  if (currentView === "map") { el.innerHTML = ""; return; }
+  const counts = {};
+  data[currentView].nodes.forEach(n => { counts[n.domain] = (counts[n.domain] || 0) + 1; });
+  el.innerHTML = Object.entries(counts)
+    .map(([d, c]) => `<span class="stat-badge">${d}: <b>${c}</b></span>`).join("");
+}
+
+function updateTabLabels() {
+  const s = data.schema, i = data.instances;
+  document.getElementById("tab-schema").textContent = `SCHEMA (${s.nodes.length} · ${s.edges.length})`;
+  document.getElementById("tab-instances").textContent = `INSTANCES (${i.nodes.length})`;
+  document.getElementById("tab-map").textContent = `MAP (${data.map.length})`;
+  document.getElementById("schema-source-note").textContent =
+    "Schema source: " + (data.schema_source || "unknown") + ".";
+}
+
+// ---------- Demo-path replay ----------
+// Edges are the source of truth (exact relationship "id"s) -- the node set
+// is derived from their endpoints, so a highlighted node can never end up
+// without a highlighted edge to another highlighted node.
+const DEMO_PATHS = {
+  suppliers: { view: "schema", edges: ["material_to_supplier"] },
+  centerpiece: { view: "schema", edges: ["check_to_line", "line_to_factory", "inventory_to_factory", "inventory_to_material"] },
+};
+
+function runDemoPath(key) {
+  if (key === "clear") { clearSelection(); return; }
+  const demo = DEMO_PATHS[key];
+  if (!demo) return;
+  if (currentView !== demo.view) switchView(demo.view);
+  selectedNodeId = null;
+  neighborSet = null;
+  demoEdgeIds = new Set(demo.edges);
+  demoNodeIds = new Set();
+  data[demo.view].edges.forEach(e => {
+    if (demoEdgeIds.has(e.id)) { demoNodeIds.add(e.source); demoNodeIds.add(e.target); }
+  });
+  updateFilterHighlight();
+}
+
+document.querySelectorAll(".demo-btn").forEach(btn => {
+  btn.addEventListener("click", () => runDemoPath(btn.dataset.demo));
+});
+
+// ---------- Search ----------
+document.getElementById("search").addEventListener("input", (event) => {
+  searchTerm = event.target.value.trim().toLowerCase();
+  if (currentView !== "map") updateFilterHighlight();
+});
+
+// ---------- View switching ----------
+function setControlsVisibility() {
+  const showGraphControls = currentView !== "map";
+  document.getElementById("search").style.display = showGraphControls ? "" : "none";
+  document.getElementById("domain-toggles").style.display = showGraphControls ? "" : "none";
+  document.getElementById("demo-panel").style.display = showGraphControls ? "" : "none";
+  document.getElementById("legend").style.display = showGraphControls ? "" : "none";
+}
+
+function switchView(view) {
+  if (view !== "map" && simTimer) setSimRunning(false);
+  currentView = view;
+  location.hash = view;
+  activeDomains = null;
+  selectedNodeId = null;
+  neighborSet = null;
+  demoEdgeIds = null;
+  demoNodeIds = null;
+  searchTerm = "";
+  document.getElementById("search").value = "";
+  document.getElementById("tab-schema").classList.toggle("active", view === "schema");
+  document.getElementById("tab-instances").classList.toggle("active", view === "instances");
+  document.getElementById("tab-map").classList.toggle("active", view === "map");
+  document.getElementById("graph").style.display = view === "map" ? "none" : "block";
+  document.getElementById("map").style.display = view === "map" ? "block" : "none";
+  setControlsVisibility();
+
+  if (view === "map") {
+    document.getElementById("inspector-content").innerHTML = DEFAULT_INSPECTOR_HTML;
+    renderStatsBadges();
+    document.getElementById("status").innerHTML =
+      `<span class="live">● LIVE</span><span class="sep">|</span>${data.scenario.toUpperCase()}` +
+      `<span class="sep">|</span>MAP VIEW: ${data.map.length} FACTORIES`;
+    initMap();
+  } else {
+    renderDomainToggles();
+    renderGraph();
+    renderStatsBadges();
+  }
+}
+
+document.getElementById("tab-schema").addEventListener("click", () => switchView("schema"));
+document.getElementById("tab-instances").addEventListener("click", () => switchView("instances"));
+document.getElementById("tab-map").addEventListener("click", () => switchView("map"));
+
+// ---------- Map (world globe -> region -> factory -> interior) ----------
+const COUNTRY_NAME_MAP = { "Spain": "Spain", "United States": "United States of America", "Brazil": "Brazil", "Singapore": null };
+
+// The 6 in-factory stages every line runs (matches simulator/src/stage_catalog.py),
+// each rendered as its own dedicated rig along one production line.
+// Purely illustrative/animated -- not driven by live simulator data.
+// Metric ranges match simulator/src/stage_catalog.py exactly (same stages,
+// same units, same min/max) -- the readouts are randomly sampled in-browser,
+// not fed by the real simulator, but they're the same sensors it models.
+const SIM_STAGES = [
+  { name: "Grinding", rig: `
+    <div class="rig grind"><div class="wheel a"></div><div class="wheel b"></div></div>`,
+    metrics: [
+      { label: "Particle Size", unit: "µm", min: 18, max: 35 },
+      { label: "Motor Temp", unit: "°C", min: 55, max: 75 },
+      { label: "Throughput", unit: "kg/h", min: 180, max: 260 },
+    ] },
+  { name: "Mixing & Refining", rig: `
+    <div class="rig mix"><div class="vat"><div class="liquid"></div><div class="sheen"></div></div></div>`,
+    metrics: [
+      { label: "Particle Size", unit: "µm", min: 15, max: 25 },
+      { label: "Roller Temp", unit: "°C", min: 40, max: 55 },
+      { label: "Viscosity", unit: "Pa·s", min: 2, max: 6 },
+    ] },
+  { name: "Conching", rig: `
+    <div class="rig conch"><div class="drum">
+      <div class="steam"><span></span><span></span><span></span></div>
+    </div></div>`,
+    metrics: [
+      { label: "Temperature", unit: "°C", min: 45, max: 70 },
+      { label: "Moisture", unit: "%", min: 0.5, max: 1.5 },
+      { label: "Acidity", unit: "pH", min: 5.0, max: 5.8 },
+    ] },
+  { name: "Tempering", rig: `
+    <div class="rig temper"><div class="tank-wrap">
+      <div class="tank"><div class="level"></div></div>
+      <div class="ticks"><span></span><span></span><span></span><span></span></div>
+    </div></div>`,
+    metrics: [
+      { label: "Temperature", unit: "°C", min: 27, max: 32 },
+      { label: "Crystal Form", unit: "idx", min: 3, max: 6 },
+      { label: "Viscosity", unit: "Pa·s", min: 2, max: 4 },
+    ] },
+  { name: "Molding & Cooling", rig: `
+    <div class="rig mold"><div class="tunnel">
+      <div class="bar"></div><div class="bar"></div><div class="bar"></div>
+    </div></div>`,
+    metrics: [
+      { label: "Mold Temp", unit: "°C", min: 10, max: 15 },
+      { label: "Tunnel Temp", unit: "°C", min: 8, max: 12 },
+      { label: "Vibration", unit: "Hz", min: 40, max: 60 },
+    ] },
+  { name: "Packaging", rig: `
+    <div class="rig pack"><div class="arm"></div><div class="obelt"></div>
+      <div class="crate"></div><div class="stack"></div>
+    </div>`,
+    metrics: [
+      { label: "Line Speed", unit: "u/min", min: 60, max: 120 },
+      { label: "Seal Temp", unit: "°C", min: 130, max: 160 },
+      { label: "Reject Rate", unit: "%", min: 0, max: 3 },
+    ] },
+];
+
+let simTimer = null;
+let simRunning = true;
+
+function sample(min, max) {
+  return (Math.random() * (max - min) + min).toFixed(min < 10 && max <= 10 ? 2 : 1);
+}
+
+function tickTelemetry() {
+  SIM_STAGES.forEach((stage, si) => {
+    stage.metrics.forEach((m, mi) => {
+      const el = document.getElementById(`t-${si}-${mi}`);
+      if (!el) return;
+      el.textContent = sample(m.min, m.max);
+      el.classList.remove("flash");
+      void el.offsetWidth; // restart the CSS animation
+      el.classList.add("flash");
+    });
+  });
+}
+
+function setSimRunning(running) {
+  simRunning = running;
+  if (simTimer) { clearInterval(simTimer); simTimer = null; }
+  if (running) { tickTelemetry(); simTimer = setInterval(tickTelemetry, 1400); }
+  const btn = document.getElementById("sim-toggle");
+  if (btn) {
+    btn.classList.toggle("on", running);
+    btn.innerHTML = running ? "⏸ SIMULATION: ON" : "▶ SIMULATION: OFF";
+  }
+  document.querySelectorAll(".t-dot, .card-status .dot").forEach(d => d.classList.toggle("live", running));
+  document.querySelectorAll(".card-status .label").forEach(l => { l.textContent = running ? "LIVE" : "IDLE"; });
+  document.querySelectorAll(".arrow").forEach(a => a.classList.toggle("paused", !running));
+}
+
+// Explicit grid coordinates for the boustrophedon layout (5 cols x 3 rows,
+// with narrow arrow columns/rows interleaved between the 6 stage cards).
+const SNAKE_POS = [
+  { col: 1, row: 1 }, { col: 3, row: 1 }, { col: 5, row: 1 },
+  { col: 5, row: 3 }, { col: 3, row: 3 }, { col: 1, row: 3 },
+];
+const SNAKE_ARROWS = [
+  { col: 2, row: 1, dir: "right" }, { col: 4, row: 1, dir: "right" },
+  { col: 5, row: 2, dir: "down" },
+  { col: 4, row: 3, dir: "left" }, { col: 2, row: 3, dir: "left" },
+];
+
+function renderFloor() {
+  const cards = SIM_STAGES.map((s, i) => `
+    <div class="stage-card" style="grid-column:${SNAKE_POS[i].col};grid-row:${SNAKE_POS[i].row}">
+      <div class="card-head">
+        <div class="step"><b>${i + 1}</b><em>${s.name}</em></div>
+        <div class="card-status"><span class="dot live"></span><span class="label">LIVE</span></div>
+      </div>
+      <div class="card-body">
+        ${s.rig}
+        <div class="telemetry">
+          ${s.metrics.map((m, mi) => `
+            <div class="t-row">
+              <span class="t-dot live"></span>
+              <span class="t-label">${m.label}</span>
+              <span class="t-val" id="t-${i}-${mi}">${sample(m.min, m.max)}</span>
+              <span class="t-unit">${m.unit}</span>
+            </div>
+          `).join("")}
+        </div>
+      </div>
+    </div>
+  `).join("");
+
+  const arrows = SNAKE_ARROWS.map(a =>
+    `<div class="arrow ${a.dir}" style="grid-column:${a.col};grid-row:${a.row}"></div>`
+  ).join("");
+
+  return `<div class="floor"><div class="snake-grid">${cards}${arrows}</div></div>`;
+}
+
+let coords = {};
+let worldAtlas = null;
+let mapSvg = null, mapProjection = null, mapPathGen = null, mapScale0 = 0, mapBaseScale = 0;
+let mapRotate = [-20, -20];
+let mapLevel = "globe"; // globe | site | interior
+let mapZoomedFactory = null;
+let highlightedCountry = null;
+let mapInitialized = false;
+
+async function initMap() {
+  if (mapInitialized) { redrawMapIfReady(); updateBreadcrumb(); return; }
+  mapInitialized = true;
+
+  coords = await fetch("factory-coords.json").then(r => r.json());
+  const topo = await fetch("vendor/countries-110m.json").then(r => r.json());
+  worldAtlas = topojson.feature(topo, topo.objects.countries);
+
+  mapSvg = d3.select("#map-canvas").append("svg");
+  const mapDefs = mapSvg.append("defs");
+  const mapGlow = mapDefs.append("filter").attr("id", "map-glow").attr("x", "-80%").attr("y", "-80%").attr("width", "260%").attr("height", "260%");
+  mapGlow.append("feGaussianBlur").attr("stdDeviation", 3).attr("result", "blur");
+  mapGlow.append("feMerge").selectAll("feMergeNode").data(["blur", "SourceGraphic"]).join("feMergeNode").attr("in", d => d);
+
+  const { w, h } = mapResize();
+  mapScale0 = Math.min(w, h) / 2.3;
+  mapBaseScale = mapScale0;
+  mapProjection = d3.geoOrthographic().rotate(mapRotate).scale(mapScale0).translate([w / 2, h / 2]).clipAngle(90);
+  mapPathGen = d3.geoPath(mapProjection);
+
+  mapSvg.append("circle").attr("class", "globe-sphere")
+    .attr("cx", w / 2).attr("cy", h / 2).attr("r", mapScale0)
+    .attr("fill", "#0a0f14").attr("stroke", "#1c2a35");
+
+  mapSvg.append("path").attr("class", "graticule")
+    .datum(d3.geoGraticule()())
+    .attr("fill", "none").attr("stroke", "#16222c").attr("stroke-width", 0.5);
+
+  mapSvg.append("g").attr("class", "countries")
+    .selectAll("path").data(worldAtlas.features).join("path")
+    .attr("stroke", "#22323e").attr("stroke-width", 0.6);
+
+  mapSvg.append("g").attr("class", "pins");
+
+  mapSvg.call(d3.drag().on("drag", (event) => {
+    const k = 0.28;
+    mapRotate = [mapRotate[0] + event.dx * k, Math.max(-90, Math.min(90, mapRotate[1] - event.dy * k))];
+    mapProjection.rotate(mapRotate);
+    redrawMap();
+  }));
+
+  mapSvg.on("wheel", (event) => {
+    event.preventDefault();
+    const factor = event.deltaY < 0 ? 1.15 : 1 / 1.15;
+    mapBaseScale = Math.max(mapScale0 * 0.5, Math.min(mapScale0 * 6, mapBaseScale * factor));
+    mapProjection.scale(mapBaseScale);
+    redrawMap();
+  });
+
+  document.getElementById("back-to-globe").addEventListener("click", resetMapToGlobe);
+
+  redrawMap();
+  updateBreadcrumb();
+}
+
+function mapResize() {
+  const rect = document.getElementById("map-canvas").getBoundingClientRect();
+  return { w: rect.width || 800, h: rect.height || 600 };
+}
+
+function redrawMapIfReady() {
+  if (!mapProjection) return;
+  const { w, h } = mapResize();
+  mapSvg.attr("viewBox", [0, 0, w, h]);
+  mapProjection.translate([w / 2, h / 2]);
+  redrawMap();
+}
+
+function pinVisible(lon, lat) {
+  const center = [-mapRotate[0], -mapRotate[1]];
+  return d3.geoDistance([lon, lat], center) < Math.PI / 2;
+}
+
+function redrawMap() {
+  mapSvg.select(".graticule").attr("d", mapPathGen);
+  mapSvg.select(".countries").selectAll("path")
+    .attr("d", mapPathGen)
+    .attr("fill", d => highlightedCountry && d.properties.name === highlightedCountry ? "#1c3d3a" : "#101a22");
+
+  const factories = (data && data.map) || [];
+  const pins = mapSvg.select(".pins").selectAll("g.map-pin")
+    .data(factories.filter(f => coords[f.FactoryId]), f => f.FactoryId)
+    .join(enter => {
+      const g = enter.append("g").attr("class", "map-pin")
+        .on("click", (event, f) => { event.stopPropagation(); focusFactory(f); });
+      g.append("circle").attr("r", 5).attr("fill", "var(--accent)").attr("filter", "url(#map-glow)");
+      g.append("text").attr("class", "map-label").attr("x", 9).attr("y", 4).text(f => f.Code);
+      return g;
+    });
+
+  pins.attr("transform", f => {
+    const c = coords[f.FactoryId];
+    const p = mapProjection([c.lon, c.lat]);
+    return `translate(${p[0]},${p[1]})`;
+  }).style("display", f => {
+    const c = coords[f.FactoryId];
+    return pinVisible(c.lon, c.lat) ? null : "none";
+  });
+}
+
+function focusFactory(f) {
+  const c = coords[f.FactoryId];
+  if (!c) return;
+  const targetRotate = [-c.lon, -c.lat];
+  const targetScale = mapScale0 * 2.8;
+  highlightedCountry = COUNTRY_NAME_MAP[f.Country] !== undefined ? COUNTRY_NAME_MAP[f.Country] : f.Country;
+  mapLevel = "site";
+
+  const rInterp = d3.interpolate(mapRotate, targetRotate);
+  const sInterp = d3.interpolate(mapProjection.scale(), targetScale);
+  d3.transition().duration(1300).ease(d3.easeCubicInOut).tween("map-focus", () => (t) => {
+    mapRotate = rInterp(t);
+    mapBaseScale = sInterp(t);
+    mapProjection.rotate(mapRotate).scale(mapBaseScale);
+    redrawMap();
+  }).on("end", () => {
+    mapZoomedFactory = f;
+    showFactoryCard(f);
+    updateBreadcrumb();
+  });
+}
+
+function resetMapToGlobe() {
+  setSimRunning(false);
+  document.getElementById("map-interior").style.display = "none";
+  mapLevel = "globe";
+  mapZoomedFactory = null;
+  highlightedCountry = null;
+  const targetRotate = [-20, -20];
+  const rInterp = d3.interpolate(mapRotate, targetRotate);
+  const sInterp = d3.interpolate(mapProjection.scale(), mapScale0);
+  d3.transition().duration(1000).ease(d3.easeCubicInOut).tween("map-reset", () => (t) => {
+    mapRotate = rInterp(t);
+    mapBaseScale = sInterp(t);
+    mapProjection.rotate(mapRotate).scale(mapBaseScale);
+    redrawMap();
+  });
+  document.getElementById("inspector-content").innerHTML = DEFAULT_INSPECTOR_HTML;
+  updateBreadcrumb();
+}
+
+function showFactoryCard(f) {
+  document.getElementById("inspector-content").innerHTML = `
+    <p class="eyebrow">Factory Site</p>
+    <span class="badge" style="color:var(--accent)">${f.Region}</span>
+    <h2>🏭 ${f.Code}</h2>
+    <table>
+      <tr><td>City</td><td>${f.City}</td></tr>
+      <tr><td>Country</td><td>${f.Country}</td></tr>
+      <tr><td>Production lines</td><td>${f.LineCount}</td></tr>
+      <tr><td>Time zone</td><td>${f.TimeZone}</td></tr>
+    </table>
+    <button class="enter-btn" id="enter-factory-btn">ENTER FACTORY →</button>
+  `;
+  document.getElementById("enter-factory-btn").addEventListener("click", () => showInterior(f));
+}
+
+function showInterior(f) {
+  mapLevel = "interior";
+  const el = document.getElementById("map-interior");
+  el.innerHTML = `
+    <button class="back" id="back-to-site">← BACK TO SITE</button>
+    <div class="floor-header">
+      <div>
+        <p class="eyebrow">${f.Code} · ${f.City} · ${f.LineCount} production line${f.LineCount === 1 ? "" : "s"}</p>
+        <h2>Inside the factory — simulated production line</h2>
+      </div>
+      <button class="sim-toggle on" id="sim-toggle">⏸ SIMULATION: ON</button>
+    </div>
+    ${renderFloor()}
+  `;
+  el.style.display = "block";
+  document.getElementById("back-to-site").addEventListener("click", () => {
+    el.style.display = "none";
+    mapLevel = "site";
+    setSimRunning(false);
+    updateBreadcrumb();
+  });
+  document.getElementById("sim-toggle").addEventListener("click", () => setSimRunning(!simRunning));
+  setSimRunning(true);
+  updateBreadcrumb();
+}
+
+function updateBreadcrumb() {
+  document.getElementById("back-to-globe").classList.toggle("visible", mapLevel !== "globe");
+  const bc = document.getElementById("map-breadcrumb");
+  const parts = [`<span data-crumb="globe" class="${mapLevel === 'globe' ? 'current' : ''}">GLOBE</span>`];
+  if (mapZoomedFactory) {
+    parts.push(`<span class="sep">/</span><span data-crumb="site" class="${mapLevel === 'site' ? 'current' : ''}">${mapZoomedFactory.Region} · ${mapZoomedFactory.Code}</span>`);
+  }
+  if (mapLevel === "interior") {
+    parts.push(`<span class="sep">/</span><span class="current">INTERIOR</span>`);
+  }
+  bc.innerHTML = parts.join("");
+  bc.querySelectorAll("[data-crumb]").forEach(el => {
+    el.addEventListener("click", () => {
+      const crumb = el.dataset.crumb;
+      if (crumb === "globe") { setSimRunning(false); resetMapToGlobe(); }
+      else if (crumb === "site" && mapZoomedFactory) {
+        document.getElementById("map-interior").style.display = "none";
+        mapLevel = "site";
+        setSimRunning(false);
+        showFactoryCard(mapZoomedFactory);
+        updateBreadcrumb();
+      }
+    });
+  });
+}
+
+// ---------- Boot ----------
+fetch("graph-data.json")
+  .then(r => r.json())
+  .then(json => {
+    data = json;
+    currentView = location.hash === "#instances" ? "instances" : location.hash === "#map" ? "map" : "schema";
+    updateTabLabels();
+    document.getElementById("loading-overlay").classList.add("hidden");
+    switchView(currentView);
+  })
+  .catch(err => {
+    document.getElementById("loading-overlay").classList.add("hidden");
+    document.getElementById("status").textContent =
+      "failed to load graph-data.json — run build_graph_data.py first (" + err + ")";
+  });
+</script>
+</body>
+</html>

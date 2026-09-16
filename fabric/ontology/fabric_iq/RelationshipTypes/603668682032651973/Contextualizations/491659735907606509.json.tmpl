@@ -1,0 +1,21 @@
+{
+  "id": "491659735907606509",
+  "dataBindingTable": {
+    "sourceType": "LakehouseTable",
+    "workspaceId": "{{ .WorkspaceId }}",
+    "itemId": "{{ .LakehouseId }}",
+    "sourceTableName": "order_line"
+  },
+  "sourceKeyRefBindings": [
+    {
+      "sourceColumnName": "OrderLineId",
+      "targetPropertyId": "855120191682420786"
+    }
+  ],
+  "targetKeyRefBindings": [
+    {
+      "sourceColumnName": "OrderId",
+      "targetPropertyId": "306451690065095366"
+    }
+  ]
+}

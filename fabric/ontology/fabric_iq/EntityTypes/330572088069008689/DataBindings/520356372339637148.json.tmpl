@@ -1,0 +1,34 @@
+{
+  "id": "520356372339637148",
+  "dataBindingConfiguration": {
+    "dataBindingType": "NonTimeSeries",
+    "propertyBindings": [
+      {
+        "sourceColumnName": "OrderLineId",
+        "targetPropertyId": "855120191682420786"
+      },
+      {
+        "sourceColumnName": "OrderId",
+        "targetPropertyId": "815181240780315908"
+      },
+      {
+        "sourceColumnName": "ProductId",
+        "targetPropertyId": "937865933804559617"
+      },
+      {
+        "sourceColumnName": "QuantityKg",
+        "targetPropertyId": "1051004539522254118"
+      },
+      {
+        "sourceColumnName": "UnitPrice",
+        "targetPropertyId": "1093773810564026741"
+      }
+    ],
+    "sourceTableProperties": {
+      "sourceType": "LakehouseTable",
+      "workspaceId": "{{ .WorkspaceId }}",
+      "itemId": "{{ .LakehouseId }}",
+      "sourceTableName": "order_line"
+    }
+  }
+}

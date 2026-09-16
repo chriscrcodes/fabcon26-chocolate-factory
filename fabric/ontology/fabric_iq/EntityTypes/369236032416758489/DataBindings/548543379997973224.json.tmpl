@@ -1,0 +1,49 @@
+{
+  "id": "548543379997973224",
+  "dataBindingConfiguration": {
+    "dataBindingType": "TimeSeries",
+    "timestampColumnName": "Timestamp",
+    "propertyBindings": [
+      {
+        "sourceColumnName": "Timestamp",
+        "targetPropertyId": "974381339318418154"
+      },
+      {
+        "sourceColumnName": "EventId",
+        "targetPropertyId": "549721031266699837"
+      },
+      {
+        "sourceColumnName": "LineId",
+        "targetPropertyId": "606514981216356908"
+      },
+      {
+        "sourceColumnName": "LineName",
+        "targetPropertyId": "834024163344456242"
+      },
+      {
+        "sourceColumnName": "FactoryId",
+        "targetPropertyId": "792721277254994003"
+      },
+      {
+        "sourceColumnName": "FactoryCode",
+        "targetPropertyId": "118468036083073440"
+      },
+      {
+        "sourceColumnName": "Status",
+        "targetPropertyId": "1060287033599542423"
+      },
+      {
+        "sourceColumnName": "Reason",
+        "targetPropertyId": "529507867144665277"
+      }
+    ],
+    "sourceTableProperties": {
+      "sourceType": "KustoTable",
+      "workspaceId": "{{ .WorkspaceId }}",
+      "itemId": "{{ .EventhouseId }}",
+      "clusterUri": "{{ .ClusterUri }}",
+      "databaseName": "{{ .DatabaseName }}",
+      "sourceTableName": "silver_line_status"
+    }
+  }
+}

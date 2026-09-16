@@ -1,0 +1,21 @@
+{
+  "id": "1029513139278903896",
+  "dataBindingTable": {
+    "sourceType": "LakehouseTable",
+    "workspaceId": "{{ .WorkspaceId }}",
+    "itemId": "{{ .LakehouseId }}",
+    "sourceTableName": "silver_grinding"
+  },
+  "sourceKeyRefBindings": [
+    {
+      "sourceColumnName": "LineId",
+      "targetPropertyId": "797365222877092030"
+    }
+  ],
+  "targetKeyRefBindings": [
+    {
+      "sourceColumnName": "BatchId",
+      "targetPropertyId": "437529534197250178"
+    }
+  ]
+}

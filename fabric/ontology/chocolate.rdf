@@ -1,0 +1,1138 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rdf:RDF
+    xml:base="http://example.org/ontology/chocolate-factory/"
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+    xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"
+    xmlns:owl="http://www.w3.org/2002/07/owl#"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+    xmlns:ont="http://example.org/ontology/chocolate-factory/">
+
+    <!-- Chocolate Factory -->
+    <!-- Four chocolate factories (Barcelona, Chicago, São Paulo, Singapore), each running 2-3 production lines through the in-factory stages of chocolate making (grinding through packaging), plus the supply chain and ERP data around them. Farm Preparation (harvest, fermentation, drying, roasting, winnowing) happens near cocoa origin, upstream of these factories - see ../../CHOCOLATE-FACTORY.md - and is represented here only as incoming 'Cocoa Nibs' material from suppliers. -->
+
+    <!-- Classes -->
+
+    <owl:Class rdf:about="http://example.org/ontology/chocolate-factory/Factory">
+        <rdfs:label>Factory</rdfs:label>
+        <rdfs:comment>factory</rdfs:comment>
+        <ont:icon>🏭</ont:icon>
+        <ont:color>#A5522A</ont:color>
+    </owl:Class>
+
+    <owl:Class rdf:about="http://example.org/ontology/chocolate-factory/ProductionLine">
+        <rdfs:label>ProductionLine</rdfs:label>
+        <rdfs:comment>production_line</rdfs:comment>
+        <ont:icon>🏭</ont:icon>
+        <ont:color>#A5522A</ont:color>
+    </owl:Class>
+
+    <owl:Class rdf:about="http://example.org/ontology/chocolate-factory/ProductionStage">
+        <rdfs:label>ProductionStage</rdfs:label>
+        <rdfs:comment>production_stage</rdfs:comment>
+        <ont:icon>🏭</ont:icon>
+        <ont:color>#A5522A</ont:color>
+    </owl:Class>
+
+    <owl:Class rdf:about="http://example.org/ontology/chocolate-factory/Recipe">
+        <rdfs:label>Recipe</rdfs:label>
+        <rdfs:comment>recipe</rdfs:comment>
+        <ont:icon>🏭</ont:icon>
+        <ont:color>#A5522A</ont:color>
+    </owl:Class>
+
+    <owl:Class rdf:about="http://example.org/ontology/chocolate-factory/Batch">
+        <rdfs:label>Batch</rdfs:label>
+        <rdfs:comment>Materialized from bronze_batch_event (EventType: Started/Completed), streamed by the data generator at the first tick of grinding and the last tick of packaging -- not inferred from sensor_reading timing.</rdfs:comment>
+        <ont:icon>🏭</ont:icon>
+        <ont:color>#A5522A</ont:color>
+    </owl:Class>
+
+    <owl:Class rdf:about="http://example.org/ontology/chocolate-factory/SensorReading">
+        <rdfs:label>SensorReading</rdfs:label>
+        <rdfs:comment>Streamed in real time from the data generator to Azure Event Hub -&gt; Fabric Eventstream -&gt; Eventhouse. One row per metric per tick (EAV shape) so new metrics never require a schema change.</rdfs:comment>
+        <ont:icon>🏭</ont:icon>
+        <ont:color>#A5522A</ont:color>
+    </owl:Class>
+
+    <owl:Class rdf:about="http://example.org/ontology/chocolate-factory/QualityCheck">
+        <rdfs:label>QualityCheck</rdfs:label>
+        <rdfs:comment>quality_check</rdfs:comment>
+        <ont:icon>🏭</ont:icon>
+        <ont:color>#A5522A</ont:color>
+    </owl:Class>
+
+    <owl:Class rdf:about="http://example.org/ontology/chocolate-factory/LineStatus">
+        <rdfs:label>LineStatus</rdfs:label>
+        <rdfs:comment>Streamed by the data generator on every Running&lt;-&gt;Down transition (state-change log, not a per-tick heartbeat). Status: Running or Down. Reason is set on Down rows only. Feeds Availability in gold_factory_oee_daily.</rdfs:comment>
+        <ont:icon>🏭</ont:icon>
+        <ont:color>#A5522A</ont:color>
+    </owl:Class>
+
+    <owl:Class rdf:about="http://example.org/ontology/chocolate-factory/Supplier">
+        <rdfs:label>Supplier</rdfs:label>
+        <rdfs:comment>supplier</rdfs:comment>
+        <ont:icon>🚚</ont:icon>
+        <ont:color>#2F6E63</ont:color>
+    </owl:Class>
+
+    <owl:Class rdf:about="http://example.org/ontology/chocolate-factory/Material">
+        <rdfs:label>Material</rdfs:label>
+        <rdfs:comment>Type includes 'Cocoa Nibs' -- the output of the off-site Farm Preparation phase -- alongside Sugar, Milk, Packaging.</rdfs:comment>
+        <ont:icon>🚚</ont:icon>
+        <ont:color>#2F6E63</ont:color>
+    </owl:Class>
+
+    <owl:Class rdf:about="http://example.org/ontology/chocolate-factory/Inventory">
+        <rdfs:label>Inventory</rdfs:label>
+        <rdfs:comment>inventory</rdfs:comment>
+        <ont:icon>🚚</ont:icon>
+        <ont:color>#2F6E63</ont:color>
+    </owl:Class>
+
+    <owl:Class rdf:about="http://example.org/ontology/chocolate-factory/BatchMaterialUsage">
+        <rdfs:label>BatchMaterialUsage</rdfs:label>
+        <rdfs:comment>Junction table closing the batch -&gt; material/supplier lot-traceability gap -- which material lots (and so which suppliers) fed a specific batch. BatchId is a loose, cross-plane reference to the Eventhouse's batch, same as shipment.BatchId, not a real FK.</rdfs:comment>
+        <ont:icon>🏭</ont:icon>
+        <ont:color>#A5522A</ont:color>
+    </owl:Class>
+
+    <owl:Class rdf:about="http://example.org/ontology/chocolate-factory/Shipment">
+        <rdfs:label>Shipment</rdfs:label>
+        <rdfs:comment>shipment</rdfs:comment>
+        <ont:icon>🚚</ont:icon>
+        <ont:color>#2F6E63</ont:color>
+    </owl:Class>
+
+    <owl:Class rdf:about="http://example.org/ontology/chocolate-factory/Customer">
+        <rdfs:label>Customer</rdfs:label>
+        <rdfs:comment>customer</rdfs:comment>
+        <ont:icon>🧾</ont:icon>
+        <ont:color>#5B4B8A</ont:color>
+    </owl:Class>
+
+    <owl:Class rdf:about="http://example.org/ontology/chocolate-factory/Product">
+        <rdfs:label>Product</rdfs:label>
+        <rdfs:comment>product</rdfs:comment>
+        <ont:icon>🧾</ont:icon>
+        <ont:color>#5B4B8A</ont:color>
+    </owl:Class>
+
+    <owl:Class rdf:about="http://example.org/ontology/chocolate-factory/SalesOrder">
+        <rdfs:label>SalesOrder</rdfs:label>
+        <rdfs:comment>sales_order</rdfs:comment>
+        <ont:icon>🧾</ont:icon>
+        <ont:color>#5B4B8A</ont:color>
+    </owl:Class>
+
+    <owl:Class rdf:about="http://example.org/ontology/chocolate-factory/OrderLine">
+        <rdfs:label>OrderLine</rdfs:label>
+        <rdfs:comment>order_line</rdfs:comment>
+        <ont:icon>🧾</ont:icon>
+        <ont:color>#5B4B8A</ont:color>
+    </owl:Class>
+
+    <owl:Class rdf:about="http://example.org/ontology/chocolate-factory/Invoice">
+        <rdfs:label>Invoice</rdfs:label>
+        <rdfs:comment>invoice</rdfs:comment>
+        <ont:icon>🧾</ont:icon>
+        <ont:color>#5B4B8A</ont:color>
+    </owl:Class>
+
+    <!-- Data Properties: Factory -->
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/factory_FactoryId">
+        <rdfs:label>FactoryId</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Factory"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+        <ont:isIdentifier rdf:datatype="http://www.w3.org/2001/XMLSchema#boolean">true</ont:isIdentifier>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/factory_Code">
+        <rdfs:label>Code</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Factory"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/factory_City">
+        <rdfs:label>City</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Factory"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/factory_Country">
+        <rdfs:label>Country</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Factory"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/factory_Region">
+        <rdfs:label>Region</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Factory"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/factory_TimeZone">
+        <rdfs:label>TimeZone</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Factory"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <!-- Data Properties: ProductionLine -->
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/production_line_LineId">
+        <rdfs:label>LineId</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/ProductionLine"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+        <ont:isIdentifier rdf:datatype="http://www.w3.org/2001/XMLSchema#boolean">true</ont:isIdentifier>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/production_line_FactoryId">
+        <rdfs:label>FactoryId</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/ProductionLine"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/production_line_LineNumber">
+        <rdfs:label>LineNumber</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/ProductionLine"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#int"/>
+        <ont:propertyType>integer</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/production_line_Name">
+        <rdfs:label>Name</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/ProductionLine"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <!-- Data Properties: ProductionStage -->
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/production_stage_StageId">
+        <rdfs:label>StageId</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/ProductionStage"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+        <ont:isIdentifier rdf:datatype="http://www.w3.org/2001/XMLSchema#boolean">true</ont:isIdentifier>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/production_stage_Phase">
+        <rdfs:label>Phase</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/ProductionStage"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/production_stage_Name">
+        <rdfs:label>Name</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/ProductionStage"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/production_stage_SequenceOrder">
+        <rdfs:label>SequenceOrder</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/ProductionStage"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#int"/>
+        <ont:propertyType>integer</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <!-- Data Properties: Recipe -->
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/recipe_RecipeId">
+        <rdfs:label>RecipeId</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Recipe"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+        <ont:isIdentifier rdf:datatype="http://www.w3.org/2001/XMLSchema#boolean">true</ont:isIdentifier>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/recipe_Name">
+        <rdfs:label>Name</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Recipe"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/recipe_CacaoPercent">
+        <rdfs:label>CacaoPercent</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Recipe"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#float"/>
+        <ont:propertyType>decimal</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/recipe_MilkPercent">
+        <rdfs:label>MilkPercent</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Recipe"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#float"/>
+        <ont:propertyType>decimal</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/recipe_SugarPercent">
+        <rdfs:label>SugarPercent</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Recipe"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#float"/>
+        <ont:propertyType>decimal</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <!-- Data Properties: Batch -->
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/batch_BatchId">
+        <rdfs:label>BatchId</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Batch"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+        <ont:isIdentifier rdf:datatype="http://www.w3.org/2001/XMLSchema#boolean">true</ont:isIdentifier>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/batch_LineId">
+        <rdfs:label>LineId</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Batch"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/batch_RecipeId">
+        <rdfs:label>RecipeId</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Batch"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/batch_StartTime">
+        <rdfs:label>StartTime</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Batch"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#dateTime"/>
+        <ont:propertyType>datetime</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/batch_EndTime">
+        <rdfs:label>EndTime</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Batch"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#dateTime"/>
+        <ont:propertyType>datetime</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/batch_QuantityKg">
+        <rdfs:label>QuantityKg</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Batch"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#float"/>
+        <ont:propertyType>decimal</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/batch_Status">
+        <rdfs:label>Status</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Batch"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <!-- Data Properties: SensorReading -->
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/sensor_reading_ReadingId">
+        <rdfs:label>ReadingId</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/SensorReading"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+        <ont:isIdentifier rdf:datatype="http://www.w3.org/2001/XMLSchema#boolean">true</ont:isIdentifier>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/sensor_reading_LineId">
+        <rdfs:label>LineId</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/SensorReading"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/sensor_reading_StageId">
+        <rdfs:label>StageId</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/SensorReading"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/sensor_reading_BatchId">
+        <rdfs:label>BatchId</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/SensorReading"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/sensor_reading_Timestamp">
+        <rdfs:label>Timestamp</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/SensorReading"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#dateTime"/>
+        <ont:propertyType>datetime</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/sensor_reading_Metric">
+        <rdfs:label>Metric</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/SensorReading"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/sensor_reading_Value">
+        <rdfs:label>Value</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/SensorReading"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#float"/>
+        <ont:propertyType>decimal</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/sensor_reading_Unit">
+        <rdfs:label>Unit</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/SensorReading"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <!-- Data Properties: QualityCheck -->
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/quality_check_CheckId">
+        <rdfs:label>CheckId</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/QualityCheck"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+        <ont:isIdentifier rdf:datatype="http://www.w3.org/2001/XMLSchema#boolean">true</ont:isIdentifier>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/quality_check_BatchId">
+        <rdfs:label>BatchId</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/QualityCheck"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/quality_check_LineId">
+        <rdfs:label>LineId</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/QualityCheck"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/quality_check_StageId">
+        <rdfs:label>StageId</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/QualityCheck"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/quality_check_Timestamp">
+        <rdfs:label>Timestamp</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/QualityCheck"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#dateTime"/>
+        <ont:propertyType>datetime</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/quality_check_DefectRate">
+        <rdfs:label>DefectRate</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/QualityCheck"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#float"/>
+        <ont:propertyType>decimal</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/quality_check_Result">
+        <rdfs:label>Result</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/QualityCheck"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/quality_check_Notes">
+        <rdfs:label>Notes</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/QualityCheck"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <!-- Data Properties: LineStatus -->
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/line_status_EventId">
+        <rdfs:label>EventId</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/LineStatus"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+        <ont:isIdentifier rdf:datatype="http://www.w3.org/2001/XMLSchema#boolean">true</ont:isIdentifier>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/line_status_LineId">
+        <rdfs:label>LineId</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/LineStatus"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/line_status_Status">
+        <rdfs:label>Status</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/LineStatus"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/line_status_Reason">
+        <rdfs:label>Reason</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/LineStatus"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/line_status_Timestamp">
+        <rdfs:label>Timestamp</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/LineStatus"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#dateTime"/>
+        <ont:propertyType>datetime</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <!-- Data Properties: Supplier -->
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/supplier_SupplierId">
+        <rdfs:label>SupplierId</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Supplier"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+        <ont:isIdentifier rdf:datatype="http://www.w3.org/2001/XMLSchema#boolean">true</ont:isIdentifier>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/supplier_Name">
+        <rdfs:label>Name</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Supplier"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/supplier_Country">
+        <rdfs:label>Country</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Supplier"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/supplier_MaterialType">
+        <rdfs:label>MaterialType</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Supplier"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/supplier_Rating">
+        <rdfs:label>Rating</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Supplier"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#float"/>
+        <ont:propertyType>decimal</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <!-- Data Properties: Material -->
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/material_MaterialId">
+        <rdfs:label>MaterialId</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Material"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+        <ont:isIdentifier rdf:datatype="http://www.w3.org/2001/XMLSchema#boolean">true</ont:isIdentifier>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/material_SupplierId">
+        <rdfs:label>SupplierId</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Material"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/material_Type">
+        <rdfs:label>Type</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Material"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/material_LotNumber">
+        <rdfs:label>LotNumber</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Material"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/material_ReceivedDate">
+        <rdfs:label>ReceivedDate</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Material"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#date"/>
+        <ont:propertyType>date</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/material_QuantityKg">
+        <rdfs:label>QuantityKg</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Material"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#float"/>
+        <ont:propertyType>decimal</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <!-- Data Properties: Inventory -->
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/inventory_InventoryId">
+        <rdfs:label>InventoryId</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Inventory"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+        <ont:isIdentifier rdf:datatype="http://www.w3.org/2001/XMLSchema#boolean">true</ont:isIdentifier>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/inventory_FactoryId">
+        <rdfs:label>FactoryId</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Inventory"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/inventory_MaterialId">
+        <rdfs:label>MaterialId</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Inventory"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/inventory_QuantityOnHand">
+        <rdfs:label>QuantityOnHand</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Inventory"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#float"/>
+        <ont:propertyType>decimal</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/inventory_ReorderLevel">
+        <rdfs:label>ReorderLevel</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Inventory"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#float"/>
+        <ont:propertyType>decimal</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/inventory_LastUpdated">
+        <rdfs:label>LastUpdated</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Inventory"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#dateTime"/>
+        <ont:propertyType>datetime</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <!-- Data Properties: BatchMaterialUsage -->
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/batch_material_usage_UsageId">
+        <rdfs:label>UsageId</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/BatchMaterialUsage"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+        <ont:isIdentifier rdf:datatype="http://www.w3.org/2001/XMLSchema#boolean">true</ont:isIdentifier>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/batch_material_usage_BatchId">
+        <rdfs:label>BatchId</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/BatchMaterialUsage"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/batch_material_usage_MaterialId">
+        <rdfs:label>MaterialId</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/BatchMaterialUsage"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/batch_material_usage_QuantityKg">
+        <rdfs:label>QuantityKg</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/BatchMaterialUsage"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#float"/>
+        <ont:propertyType>decimal</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <!-- Data Properties: Shipment -->
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/shipment_ShipmentId">
+        <rdfs:label>ShipmentId</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Shipment"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+        <ont:isIdentifier rdf:datatype="http://www.w3.org/2001/XMLSchema#boolean">true</ont:isIdentifier>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/shipment_FromFactoryId">
+        <rdfs:label>FromFactoryId</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Shipment"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/shipment_ToLocationId">
+        <rdfs:label>ToLocationId</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Shipment"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/shipment_BatchId">
+        <rdfs:label>BatchId</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Shipment"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/shipment_Carrier">
+        <rdfs:label>Carrier</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Shipment"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/shipment_DepartDate">
+        <rdfs:label>DepartDate</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Shipment"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#date"/>
+        <ont:propertyType>date</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/shipment_ArriveDate">
+        <rdfs:label>ArriveDate</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Shipment"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#date"/>
+        <ont:propertyType>date</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/shipment_Status">
+        <rdfs:label>Status</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Shipment"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <!-- Data Properties: Customer -->
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/customer_CustomerId">
+        <rdfs:label>CustomerId</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Customer"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+        <ont:isIdentifier rdf:datatype="http://www.w3.org/2001/XMLSchema#boolean">true</ont:isIdentifier>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/customer_Name">
+        <rdfs:label>Name</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Customer"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/customer_Country">
+        <rdfs:label>Country</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Customer"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/customer_Segment">
+        <rdfs:label>Segment</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Customer"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/customer_CreditLimit">
+        <rdfs:label>CreditLimit</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Customer"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#float"/>
+        <ont:propertyType>decimal</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <!-- Data Properties: Product -->
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/product_ProductId">
+        <rdfs:label>ProductId</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Product"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+        <ont:isIdentifier rdf:datatype="http://www.w3.org/2001/XMLSchema#boolean">true</ont:isIdentifier>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/product_Name">
+        <rdfs:label>Name</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Product"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/product_RecipeId">
+        <rdfs:label>RecipeId</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Product"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/product_PackagingType">
+        <rdfs:label>PackagingType</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Product"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/product_SKU">
+        <rdfs:label>SKU</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Product"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <!-- Data Properties: SalesOrder -->
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/sales_order_OrderId">
+        <rdfs:label>OrderId</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/SalesOrder"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+        <ont:isIdentifier rdf:datatype="http://www.w3.org/2001/XMLSchema#boolean">true</ont:isIdentifier>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/sales_order_CustomerId">
+        <rdfs:label>CustomerId</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/SalesOrder"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/sales_order_OrderDate">
+        <rdfs:label>OrderDate</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/SalesOrder"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#date"/>
+        <ont:propertyType>date</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/sales_order_Status">
+        <rdfs:label>Status</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/SalesOrder"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/sales_order_TotalAmount">
+        <rdfs:label>TotalAmount</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/SalesOrder"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#float"/>
+        <ont:propertyType>decimal</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/sales_order_Currency">
+        <rdfs:label>Currency</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/SalesOrder"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <!-- Data Properties: OrderLine -->
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/order_line_OrderLineId">
+        <rdfs:label>OrderLineId</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/OrderLine"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+        <ont:isIdentifier rdf:datatype="http://www.w3.org/2001/XMLSchema#boolean">true</ont:isIdentifier>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/order_line_OrderId">
+        <rdfs:label>OrderId</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/OrderLine"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/order_line_ProductId">
+        <rdfs:label>ProductId</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/OrderLine"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/order_line_QuantityKg">
+        <rdfs:label>QuantityKg</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/OrderLine"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#float"/>
+        <ont:propertyType>decimal</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/order_line_UnitPrice">
+        <rdfs:label>UnitPrice</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/OrderLine"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#float"/>
+        <ont:propertyType>decimal</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <!-- Data Properties: Invoice -->
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/invoice_InvoiceId">
+        <rdfs:label>InvoiceId</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Invoice"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+        <ont:isIdentifier rdf:datatype="http://www.w3.org/2001/XMLSchema#boolean">true</ont:isIdentifier>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/invoice_OrderId">
+        <rdfs:label>OrderId</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Invoice"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+        <ont:propertyType>string</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/invoice_IssueDate">
+        <rdfs:label>IssueDate</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Invoice"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#date"/>
+        <ont:propertyType>date</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/invoice_DueDate">
+        <rdfs:label>DueDate</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Invoice"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#date"/>
+        <ont:propertyType>date</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/invoice_AmountDue">
+        <rdfs:label>AmountDue</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Invoice"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#float"/>
+        <ont:propertyType>decimal</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <owl:DatatypeProperty rdf:about="http://example.org/ontology/chocolate-factory/invoice_PaidDate">
+        <rdfs:label>PaidDate</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Invoice"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#date"/>
+        <ont:propertyType>date</ont:propertyType>
+    </owl:DatatypeProperty>
+
+    <!-- Object Properties (relationships) -->
+
+    <owl:ObjectProperty rdf:about="http://example.org/ontology/chocolate-factory/line_to_factory">
+        <rdfs:label>line_to_factory</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/ProductionLine"/>
+        <rdfs:range rdf:resource="http://example.org/ontology/chocolate-factory/Factory"/>
+        <rdfs:comment>FactoryId -&gt; FactoryId</rdfs:comment>
+        <ont:cardinality>many-to-one</ont:cardinality>
+        <ont:fromEntityId>ProductionLine</ont:fromEntityId>
+        <ont:toEntityId>Factory</ont:toEntityId>
+    </owl:ObjectProperty>
+
+    <owl:ObjectProperty rdf:about="http://example.org/ontology/chocolate-factory/batch_to_line">
+        <rdfs:label>batch_to_line</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Batch"/>
+        <rdfs:range rdf:resource="http://example.org/ontology/chocolate-factory/ProductionLine"/>
+        <rdfs:comment>LineId -&gt; LineId</rdfs:comment>
+        <ont:cardinality>many-to-one</ont:cardinality>
+        <ont:fromEntityId>Batch</ont:fromEntityId>
+        <ont:toEntityId>ProductionLine</ont:toEntityId>
+    </owl:ObjectProperty>
+
+    <owl:ObjectProperty rdf:about="http://example.org/ontology/chocolate-factory/batch_to_recipe">
+        <rdfs:label>batch_to_recipe</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Batch"/>
+        <rdfs:range rdf:resource="http://example.org/ontology/chocolate-factory/Recipe"/>
+        <rdfs:comment>RecipeId -&gt; RecipeId</rdfs:comment>
+        <ont:cardinality>many-to-one</ont:cardinality>
+        <ont:fromEntityId>Batch</ont:fromEntityId>
+        <ont:toEntityId>Recipe</ont:toEntityId>
+    </owl:ObjectProperty>
+
+    <owl:ObjectProperty rdf:about="http://example.org/ontology/chocolate-factory/reading_to_line">
+        <rdfs:label>reading_to_line</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/SensorReading"/>
+        <rdfs:range rdf:resource="http://example.org/ontology/chocolate-factory/ProductionLine"/>
+        <rdfs:comment>LineId -&gt; LineId</rdfs:comment>
+        <ont:cardinality>many-to-one</ont:cardinality>
+        <ont:fromEntityId>SensorReading</ont:fromEntityId>
+        <ont:toEntityId>ProductionLine</ont:toEntityId>
+    </owl:ObjectProperty>
+
+    <owl:ObjectProperty rdf:about="http://example.org/ontology/chocolate-factory/reading_to_stage">
+        <rdfs:label>reading_to_stage</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/SensorReading"/>
+        <rdfs:range rdf:resource="http://example.org/ontology/chocolate-factory/ProductionStage"/>
+        <rdfs:comment>StageId -&gt; StageId</rdfs:comment>
+        <ont:cardinality>many-to-one</ont:cardinality>
+        <ont:fromEntityId>SensorReading</ont:fromEntityId>
+        <ont:toEntityId>ProductionStage</ont:toEntityId>
+    </owl:ObjectProperty>
+
+    <owl:ObjectProperty rdf:about="http://example.org/ontology/chocolate-factory/reading_to_batch">
+        <rdfs:label>reading_to_batch</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/SensorReading"/>
+        <rdfs:range rdf:resource="http://example.org/ontology/chocolate-factory/Batch"/>
+        <rdfs:comment>BatchId -&gt; BatchId</rdfs:comment>
+        <ont:cardinality>many-to-one</ont:cardinality>
+        <ont:fromEntityId>SensorReading</ont:fromEntityId>
+        <ont:toEntityId>Batch</ont:toEntityId>
+    </owl:ObjectProperty>
+
+    <owl:ObjectProperty rdf:about="http://example.org/ontology/chocolate-factory/check_to_batch">
+        <rdfs:label>check_to_batch</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/QualityCheck"/>
+        <rdfs:range rdf:resource="http://example.org/ontology/chocolate-factory/Batch"/>
+        <rdfs:comment>BatchId -&gt; BatchId</rdfs:comment>
+        <ont:cardinality>many-to-one</ont:cardinality>
+        <ont:fromEntityId>QualityCheck</ont:fromEntityId>
+        <ont:toEntityId>Batch</ont:toEntityId>
+    </owl:ObjectProperty>
+
+    <owl:ObjectProperty rdf:about="http://example.org/ontology/chocolate-factory/check_to_line">
+        <rdfs:label>check_to_line</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/QualityCheck"/>
+        <rdfs:range rdf:resource="http://example.org/ontology/chocolate-factory/ProductionLine"/>
+        <rdfs:comment>LineId -&gt; LineId</rdfs:comment>
+        <ont:cardinality>many-to-one</ont:cardinality>
+        <ont:fromEntityId>QualityCheck</ont:fromEntityId>
+        <ont:toEntityId>ProductionLine</ont:toEntityId>
+    </owl:ObjectProperty>
+
+    <owl:ObjectProperty rdf:about="http://example.org/ontology/chocolate-factory/check_to_stage">
+        <rdfs:label>check_to_stage</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/QualityCheck"/>
+        <rdfs:range rdf:resource="http://example.org/ontology/chocolate-factory/ProductionStage"/>
+        <rdfs:comment>StageId -&gt; StageId</rdfs:comment>
+        <ont:cardinality>many-to-one</ont:cardinality>
+        <ont:fromEntityId>QualityCheck</ont:fromEntityId>
+        <ont:toEntityId>ProductionStage</ont:toEntityId>
+    </owl:ObjectProperty>
+
+    <owl:ObjectProperty rdf:about="http://example.org/ontology/chocolate-factory/line_status_to_line">
+        <rdfs:label>line_status_to_line</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/LineStatus"/>
+        <rdfs:range rdf:resource="http://example.org/ontology/chocolate-factory/ProductionLine"/>
+        <rdfs:comment>LineId -&gt; LineId</rdfs:comment>
+        <ont:cardinality>many-to-one</ont:cardinality>
+        <ont:fromEntityId>LineStatus</ont:fromEntityId>
+        <ont:toEntityId>ProductionLine</ont:toEntityId>
+    </owl:ObjectProperty>
+
+    <owl:ObjectProperty rdf:about="http://example.org/ontology/chocolate-factory/material_to_supplier">
+        <rdfs:label>material_to_supplier</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Material"/>
+        <rdfs:range rdf:resource="http://example.org/ontology/chocolate-factory/Supplier"/>
+        <rdfs:comment>SupplierId -&gt; SupplierId</rdfs:comment>
+        <ont:cardinality>many-to-one</ont:cardinality>
+        <ont:fromEntityId>Material</ont:fromEntityId>
+        <ont:toEntityId>Supplier</ont:toEntityId>
+    </owl:ObjectProperty>
+
+    <owl:ObjectProperty rdf:about="http://example.org/ontology/chocolate-factory/inventory_to_material">
+        <rdfs:label>inventory_to_material</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Inventory"/>
+        <rdfs:range rdf:resource="http://example.org/ontology/chocolate-factory/Material"/>
+        <rdfs:comment>MaterialId -&gt; MaterialId</rdfs:comment>
+        <ont:cardinality>many-to-one</ont:cardinality>
+        <ont:fromEntityId>Inventory</ont:fromEntityId>
+        <ont:toEntityId>Material</ont:toEntityId>
+    </owl:ObjectProperty>
+
+    <owl:ObjectProperty rdf:about="http://example.org/ontology/chocolate-factory/inventory_to_factory">
+        <rdfs:label>inventory_to_factory</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Inventory"/>
+        <rdfs:range rdf:resource="http://example.org/ontology/chocolate-factory/Factory"/>
+        <rdfs:comment>FactoryId -&gt; FactoryId</rdfs:comment>
+        <ont:cardinality>many-to-one</ont:cardinality>
+        <ont:fromEntityId>Inventory</ont:fromEntityId>
+        <ont:toEntityId>Factory</ont:toEntityId>
+    </owl:ObjectProperty>
+
+    <owl:ObjectProperty rdf:about="http://example.org/ontology/chocolate-factory/shipment_to_factory">
+        <rdfs:label>shipment_to_factory</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Shipment"/>
+        <rdfs:range rdf:resource="http://example.org/ontology/chocolate-factory/Factory"/>
+        <rdfs:comment>FromFactoryId -&gt; FactoryId</rdfs:comment>
+        <ont:cardinality>many-to-one</ont:cardinality>
+        <ont:fromEntityId>Shipment</ont:fromEntityId>
+        <ont:toEntityId>Factory</ont:toEntityId>
+    </owl:ObjectProperty>
+
+    <owl:ObjectProperty rdf:about="http://example.org/ontology/chocolate-factory/shipment_to_batch">
+        <rdfs:label>shipment_to_batch</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Shipment"/>
+        <rdfs:range rdf:resource="http://example.org/ontology/chocolate-factory/Batch"/>
+        <rdfs:comment>BatchId -&gt; BatchId</rdfs:comment>
+        <ont:cardinality>many-to-one</ont:cardinality>
+        <ont:fromEntityId>Shipment</ont:fromEntityId>
+        <ont:toEntityId>Batch</ont:toEntityId>
+    </owl:ObjectProperty>
+
+    <owl:ObjectProperty rdf:about="http://example.org/ontology/chocolate-factory/usage_to_batch">
+        <rdfs:label>usage_to_batch</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/BatchMaterialUsage"/>
+        <rdfs:range rdf:resource="http://example.org/ontology/chocolate-factory/Batch"/>
+        <rdfs:comment>BatchId -&gt; BatchId</rdfs:comment>
+        <ont:cardinality>many-to-one</ont:cardinality>
+        <ont:fromEntityId>BatchMaterialUsage</ont:fromEntityId>
+        <ont:toEntityId>Batch</ont:toEntityId>
+    </owl:ObjectProperty>
+
+    <owl:ObjectProperty rdf:about="http://example.org/ontology/chocolate-factory/usage_to_material">
+        <rdfs:label>usage_to_material</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/BatchMaterialUsage"/>
+        <rdfs:range rdf:resource="http://example.org/ontology/chocolate-factory/Material"/>
+        <rdfs:comment>MaterialId -&gt; MaterialId</rdfs:comment>
+        <ont:cardinality>many-to-one</ont:cardinality>
+        <ont:fromEntityId>BatchMaterialUsage</ont:fromEntityId>
+        <ont:toEntityId>Material</ont:toEntityId>
+    </owl:ObjectProperty>
+
+    <owl:ObjectProperty rdf:about="http://example.org/ontology/chocolate-factory/product_to_recipe">
+        <rdfs:label>product_to_recipe</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Product"/>
+        <rdfs:range rdf:resource="http://example.org/ontology/chocolate-factory/Recipe"/>
+        <rdfs:comment>RecipeId -&gt; RecipeId</rdfs:comment>
+        <ont:cardinality>many-to-one</ont:cardinality>
+        <ont:fromEntityId>Product</ont:fromEntityId>
+        <ont:toEntityId>Recipe</ont:toEntityId>
+    </owl:ObjectProperty>
+
+    <owl:ObjectProperty rdf:about="http://example.org/ontology/chocolate-factory/order_to_customer">
+        <rdfs:label>order_to_customer</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/SalesOrder"/>
+        <rdfs:range rdf:resource="http://example.org/ontology/chocolate-factory/Customer"/>
+        <rdfs:comment>CustomerId -&gt; CustomerId</rdfs:comment>
+        <ont:cardinality>many-to-one</ont:cardinality>
+        <ont:fromEntityId>SalesOrder</ont:fromEntityId>
+        <ont:toEntityId>Customer</ont:toEntityId>
+    </owl:ObjectProperty>
+
+    <owl:ObjectProperty rdf:about="http://example.org/ontology/chocolate-factory/orderline_to_order">
+        <rdfs:label>orderline_to_order</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/OrderLine"/>
+        <rdfs:range rdf:resource="http://example.org/ontology/chocolate-factory/SalesOrder"/>
+        <rdfs:comment>OrderId -&gt; OrderId</rdfs:comment>
+        <ont:cardinality>many-to-one</ont:cardinality>
+        <ont:fromEntityId>OrderLine</ont:fromEntityId>
+        <ont:toEntityId>SalesOrder</ont:toEntityId>
+    </owl:ObjectProperty>
+
+    <owl:ObjectProperty rdf:about="http://example.org/ontology/chocolate-factory/orderline_to_product">
+        <rdfs:label>orderline_to_product</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/OrderLine"/>
+        <rdfs:range rdf:resource="http://example.org/ontology/chocolate-factory/Product"/>
+        <rdfs:comment>ProductId -&gt; ProductId</rdfs:comment>
+        <ont:cardinality>many-to-one</ont:cardinality>
+        <ont:fromEntityId>OrderLine</ont:fromEntityId>
+        <ont:toEntityId>Product</ont:toEntityId>
+    </owl:ObjectProperty>
+
+    <owl:ObjectProperty rdf:about="http://example.org/ontology/chocolate-factory/invoice_to_order">
+        <rdfs:label>invoice_to_order</rdfs:label>
+        <rdfs:domain rdf:resource="http://example.org/ontology/chocolate-factory/Invoice"/>
+        <rdfs:range rdf:resource="http://example.org/ontology/chocolate-factory/SalesOrder"/>
+        <rdfs:comment>OrderId -&gt; OrderId</rdfs:comment>
+        <ont:cardinality>many-to-one</ont:cardinality>
+        <ont:fromEntityId>Invoice</ont:fromEntityId>
+        <ont:toEntityId>SalesOrder</ont:toEntityId>
+    </owl:ObjectProperty>
+
+</rdf:RDF>

@@ -1,0 +1,34 @@
+{
+  "id": "537255265296330123",
+  "dataBindingConfiguration": {
+    "dataBindingType": "NonTimeSeries",
+    "propertyBindings": [
+      {
+        "sourceColumnName": "SupplierId",
+        "targetPropertyId": "612012113615872719"
+      },
+      {
+        "sourceColumnName": "Name",
+        "targetPropertyId": "702613109445839313"
+      },
+      {
+        "sourceColumnName": "Country",
+        "targetPropertyId": "925278321352386795"
+      },
+      {
+        "sourceColumnName": "MaterialType",
+        "targetPropertyId": "562139141808581864"
+      },
+      {
+        "sourceColumnName": "Rating",
+        "targetPropertyId": "1129489986207583531"
+      }
+    ],
+    "sourceTableProperties": {
+      "sourceType": "LakehouseTable",
+      "workspaceId": "{{ .WorkspaceId }}",
+      "itemId": "{{ .LakehouseId }}",
+      "sourceTableName": "supplier"
+    }
+  }
+}

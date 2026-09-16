@@ -1,0 +1,38 @@
+{
+  "id": "1089112070783343101",
+  "dataBindingConfiguration": {
+    "dataBindingType": "NonTimeSeries",
+    "propertyBindings": [
+      {
+        "sourceColumnName": "InventoryId",
+        "targetPropertyId": "944379901657044559"
+      },
+      {
+        "sourceColumnName": "FactoryId",
+        "targetPropertyId": "802117896146170861"
+      },
+      {
+        "sourceColumnName": "MaterialId",
+        "targetPropertyId": "776548387932106155"
+      },
+      {
+        "sourceColumnName": "QuantityOnHand",
+        "targetPropertyId": "75345265951464413"
+      },
+      {
+        "sourceColumnName": "ReorderLevel",
+        "targetPropertyId": "1087527903866233414"
+      },
+      {
+        "sourceColumnName": "LastUpdated",
+        "targetPropertyId": "1112215865352762724"
+      }
+    ],
+    "sourceTableProperties": {
+      "sourceType": "LakehouseTable",
+      "workspaceId": "{{ .WorkspaceId }}",
+      "itemId": "{{ .LakehouseId }}",
+      "sourceTableName": "inventory"
+    }
+  }
+}

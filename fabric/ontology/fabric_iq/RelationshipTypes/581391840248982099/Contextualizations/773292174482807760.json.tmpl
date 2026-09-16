@@ -1,0 +1,21 @@
+{
+  "id": "773292174482807760",
+  "dataBindingTable": {
+    "sourceType": "LakehouseTable",
+    "workspaceId": "{{ .WorkspaceId }}",
+    "itemId": "{{ .LakehouseId }}",
+    "sourceTableName": "silver_conching"
+  },
+  "sourceKeyRefBindings": [
+    {
+      "sourceColumnName": "LineId",
+      "targetPropertyId": "530486392986044874"
+    }
+  ],
+  "targetKeyRefBindings": [
+    {
+      "sourceColumnName": "BatchId",
+      "targetPropertyId": "437529534197250178"
+    }
+  ]
+}

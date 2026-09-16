@@ -1,0 +1,37 @@
+{
+  "id": "1149230200914213608",
+  "dataBindingConfiguration": {
+    "dataBindingType": "TimeSeries",
+    "timestampColumnName": "StartTime",
+    "propertyBindings": [
+      {
+        "sourceColumnName": "BatchId",
+        "targetPropertyId": "437529534197250178"
+      },
+      {
+        "sourceColumnName": "LineId",
+        "targetPropertyId": "1118503905889744778"
+      },
+      {
+        "sourceColumnName": "RecipeId",
+        "targetPropertyId": "2380653384256426"
+      },
+      {
+        "sourceColumnName": "StartTime",
+        "targetPropertyId": "568364700732282581"
+      },
+      {
+        "sourceColumnName": "EndTime",
+        "targetPropertyId": "439079689238164695"
+      }
+    ],
+    "sourceTableProperties": {
+      "sourceType": "KustoTable",
+      "workspaceId": "{{ .WorkspaceId }}",
+      "itemId": "{{ .EventhouseId }}",
+      "clusterUri": "{{ .ClusterUri }}",
+      "databaseName": "{{ .DatabaseName }}",
+      "sourceTableName": "silver_batch"
+    }
+  }
+}

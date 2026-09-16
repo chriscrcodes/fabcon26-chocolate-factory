@@ -1,0 +1,6 @@
+ProductId,Name,RecipeId,PackagingType,SKU
+PROD-RCP-DARK70-Bar,Dark 70% Bar,RCP-DARK70,Bar,SKU-DARK70-BAR
+PROD-RCP-DARK70-GiftBox,Dark 70% GiftBox,RCP-DARK70,GiftBox,SKU-DARK70-GIF
+PROD-RCP-MILK35-Bar,Milk 35% Bar,RCP-MILK35,Bar,SKU-MILK35-BAR
+PROD-RCP-MILK35-IndividuallyWrapped,Milk 35% IndividuallyWrapped,RCP-MILK35,IndividuallyWrapped,SKU-MILK35-IND
+PROD-RCP-WHITE-Bar,White Bar,RCP-WHITE,Bar,SKU--WHITE-BAR

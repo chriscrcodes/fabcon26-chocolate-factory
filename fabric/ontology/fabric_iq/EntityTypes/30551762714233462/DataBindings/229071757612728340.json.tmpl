@@ -1,0 +1,38 @@
+{
+  "id": "229071757612728340",
+  "dataBindingConfiguration": {
+    "dataBindingType": "NonTimeSeries",
+    "propertyBindings": [
+      {
+        "sourceColumnName": "FactoryId",
+        "targetPropertyId": "239934682223052918"
+      },
+      {
+        "sourceColumnName": "Code",
+        "targetPropertyId": "743911332513996337"
+      },
+      {
+        "sourceColumnName": "City",
+        "targetPropertyId": "366146785357345661"
+      },
+      {
+        "sourceColumnName": "Country",
+        "targetPropertyId": "398677968559649080"
+      },
+      {
+        "sourceColumnName": "Region",
+        "targetPropertyId": "995984288458737624"
+      },
+      {
+        "sourceColumnName": "TimeZone",
+        "targetPropertyId": "460038670960186063"
+      }
+    ],
+    "sourceTableProperties": {
+      "sourceType": "LakehouseTable",
+      "workspaceId": "{{ .WorkspaceId }}",
+      "itemId": "{{ .LakehouseId }}",
+      "sourceTableName": "factory"
+    }
+  }
+}

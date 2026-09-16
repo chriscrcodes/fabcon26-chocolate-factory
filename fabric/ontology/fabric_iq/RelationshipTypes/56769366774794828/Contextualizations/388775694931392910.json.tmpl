@@ -1,0 +1,21 @@
+{
+  "id": "388775694931392910",
+  "dataBindingTable": {
+    "sourceType": "LakehouseTable",
+    "workspaceId": "{{ .WorkspaceId }}",
+    "itemId": "{{ .LakehouseId }}",
+    "sourceTableName": "sales_order"
+  },
+  "sourceKeyRefBindings": [
+    {
+      "sourceColumnName": "OrderId",
+      "targetPropertyId": "306451690065095366"
+    }
+  ],
+  "targetKeyRefBindings": [
+    {
+      "sourceColumnName": "CustomerId",
+      "targetPropertyId": "978373791517976409"
+    }
+  ]
+}

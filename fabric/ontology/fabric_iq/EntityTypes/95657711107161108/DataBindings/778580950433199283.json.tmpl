@@ -1,0 +1,57 @@
+{
+  "id": "778580950433199283",
+  "dataBindingConfiguration": {
+    "dataBindingType": "TimeSeries",
+    "timestampColumnName": "Timestamp",
+    "propertyBindings": [
+      {
+        "sourceColumnName": "Timestamp",
+        "targetPropertyId": "1101442187553118000"
+      },
+      {
+        "sourceColumnName": "LineId",
+        "targetPropertyId": "39989419731009786"
+      },
+      {
+        "sourceColumnName": "LineName",
+        "targetPropertyId": "598918510020907074"
+      },
+      {
+        "sourceColumnName": "FactoryId",
+        "targetPropertyId": "1129536221070536983"
+      },
+      {
+        "sourceColumnName": "FactoryCode",
+        "targetPropertyId": "808571282521008510"
+      },
+      {
+        "sourceColumnName": "StageId",
+        "targetPropertyId": "603953377573912994"
+      },
+      {
+        "sourceColumnName": "BatchId",
+        "targetPropertyId": "312046012107313683"
+      },
+      {
+        "sourceColumnName": "MoldTemperatureC",
+        "targetPropertyId": "599124878131524093"
+      },
+      {
+        "sourceColumnName": "TunnelTemperatureC",
+        "targetPropertyId": "1134145362973862685"
+      },
+      {
+        "sourceColumnName": "VibrationHz",
+        "targetPropertyId": "702579342733126134"
+      }
+    ],
+    "sourceTableProperties": {
+      "sourceType": "KustoTable",
+      "workspaceId": "{{ .WorkspaceId }}",
+      "itemId": "{{ .EventhouseId }}",
+      "clusterUri": "{{ .ClusterUri }}",
+      "databaseName": "{{ .DatabaseName }}",
+      "sourceTableName": "silver_molding_cooling"
+    }
+  }
+}

@@ -1,0 +1,37 @@
+# Vendored reference accelerators -- each is its own upstream git repo,
+# cloned for reference/comparison, not part of this repo's own history.
+# See README.md.
+sources/
+
+.DS_Store
+
+__pycache__/
+*.pyc
+.env
+.venv/
+.ruff_cache/
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+terraform.tfvars
+terraform.*.tfvars
+tfplan
+*.tfplan
+crash.log
+
+
+# APM dependencies
+apm_modules/
+
+# Personal Claude Code config/skills -- not part of this repo's history
+.claude/
+.mcp.json
+apm.yml
+apm.lock.yaml
+
+# Presentation decks -- not part of this repo's public history
+*.pptx
+
+# Generated test-run output, not source
+foundry/agents/test-results.jsonl

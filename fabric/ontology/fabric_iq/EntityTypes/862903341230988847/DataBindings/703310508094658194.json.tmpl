@@ -1,0 +1,57 @@
+{
+  "id": "703310508094658194",
+  "dataBindingConfiguration": {
+    "dataBindingType": "TimeSeries",
+    "timestampColumnName": "Timestamp",
+    "propertyBindings": [
+      {
+        "sourceColumnName": "Timestamp",
+        "targetPropertyId": "481167123550643283"
+      },
+      {
+        "sourceColumnName": "LineId",
+        "targetPropertyId": "683279945878448094"
+      },
+      {
+        "sourceColumnName": "LineName",
+        "targetPropertyId": "761130289649024145"
+      },
+      {
+        "sourceColumnName": "FactoryId",
+        "targetPropertyId": "153993197685996665"
+      },
+      {
+        "sourceColumnName": "FactoryCode",
+        "targetPropertyId": "32715689736747893"
+      },
+      {
+        "sourceColumnName": "StageId",
+        "targetPropertyId": "953861414386619958"
+      },
+      {
+        "sourceColumnName": "BatchId",
+        "targetPropertyId": "583219546325892529"
+      },
+      {
+        "sourceColumnName": "ParticleSizeMicron",
+        "targetPropertyId": "339635512020314448"
+      },
+      {
+        "sourceColumnName": "RollerTemperatureC",
+        "targetPropertyId": "253898394007077879"
+      },
+      {
+        "sourceColumnName": "ViscosityPaS",
+        "targetPropertyId": "216089503663717584"
+      }
+    ],
+    "sourceTableProperties": {
+      "sourceType": "KustoTable",
+      "workspaceId": "{{ .WorkspaceId }}",
+      "itemId": "{{ .EventhouseId }}",
+      "clusterUri": "{{ .ClusterUri }}",
+      "databaseName": "{{ .DatabaseName }}",
+      "sourceTableName": "silver_mixing_refining"
+    }
+  }
+}

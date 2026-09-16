@@ -1,0 +1,108 @@
+{
+  "configuration": {
+    "instructions": "Monitor the tempering stage's CrystalFormIndex readings in the silver_tempering table of this Eventhouse. The target value is Form V (approximately 5, on a 0-6 scale). If a CrystalFormIndex reading drifts below 4 or above 6, send an alert immediately -- this predicts a risk of bloom or a dull, streaky finish in the finished product downstream, and catching it at the tempering stage allows proactive intervention before the batch completes rather than discovering the defect later at the quality-check stage.",
+    "dataSources": {
+      "temperingTelemetry": {
+        "id": "{{ .KqlDatabaseId }}",
+        "type": "KustoDatabase",
+        "workspaceId": "{{ .WorkspaceId }}"
+      }
+    },
+    "actions": {
+      "a1e6d0d2-3b7d-4e2a-9c3a-8f2b6e5c4d10": {
+        "id": "a1e6d0d2-3b7d-4e2a-9c3a-8f2b6e5c4d10",
+        "displayName": "SendTemperingAlert",
+        "description": "Notify the tempering line operator that a batch's CrystalFormIndex has drifted out of the Form V target range.",
+        "kind": "PowerAutomateAction",
+        "parameters": [
+          { "name": "batchId", "description": "Identifier of the affected batch" },
+          { "name": "crystalFormIndex", "description": "Out-of-range CrystalFormIndex reading" }
+        ]
+      }
+    },
+    "messageDestination": {
+      "kind": "Recipient",
+      "recipient": "{{ .RecipientUpn }}"
+    }
+  },
+  "playbook": {
+    "OntologyDefinitions": {
+      "TemperingReading": {
+        "$type": "class",
+        "IRI": "TemperingReading",
+        "DocumentId": "00000000-0000-0000-0000-000000000000",
+        "Name": "TemperingReading",
+        "Description": "A single tempering-stage sensor reading, uniquely identified by BatchId and Timestamp.",
+        "DataLink": {
+          "$type": "kustotable",
+          "TableName": "silver_tempering"
+        }
+      },
+      "batchId": {
+        "$type": "data",
+        "IRI": "batchId",
+        "DocumentId": "00000000-0000-0000-0000-000000000000",
+        "Name": "batchId",
+        "Description": "Identifier of the chocolate batch being tempered.",
+        "DomainClassIRI": "TemperingReading",
+        "RangeDataType": "string",
+        "Kind": 0,
+        "DataLink": {
+          "$type": "kustotablecol",
+          "ColumnName": "BatchId"
+        }
+      },
+      "isOutOfRange": {
+        "$type": "data",
+        "IRI": "isOutOfRange",
+        "DocumentId": "00000000-0000-0000-0000-000000000000",
+        "Name": "isOutOfRange",
+        "Description": "Flag indicating the reading's CrystalFormIndex has drifted below 4 or above 6, outside the Form V target range.",
+        "DomainClassIRI": "TemperingReading",
+        "RangeDataType": "boolean",
+        "Kind": 1,
+        "DataLink": {
+          "$type": "kustotablequery",
+          "Query": "['silver_tempering'] | project id = strcat(['BatchId'],'|',format_datetime(['Timestamp'],'yyyy-MM-ddTHH:mm:ss.fffZ')), value = (['CrystalFormIndex'] < 4.0 or ['CrystalFormIndex'] > 6.0)"
+        }
+      }
+    },
+    "RuleDefinitions": {
+      "d3f1a2c4-8e5b-4c6a-9d7e-1f2b3c4d5e6f": {
+        "Id": "d3f1a2c4-8e5b-4c6a-9d7e-1f2b3c4d5e6f",
+        "Name": "Alert on tempering CrystalFormIndex drift",
+        "Description": "Triggers an alert for any tempering reading whose CrystalFormIndex has drifted outside the Form V target range (below 4 or above 6).",
+        "ClassExpression": {
+          "$type": "manchesterclassexp",
+          "Expression": "ClassExpression: AllTemperingReadings ``` TemperingReading ``` Annotations: metadata:description \"All tempering-stage sensor readings\"",
+          "Description": "All tempering-stage sensor readings"
+        },
+        "RuleCondition": {
+          "$type": "propertywhenistrue",
+          "DataPropertyName": "isOutOfRange"
+        },
+        "ActionBinding": {
+          "$type": "actionbinding",
+          "Name": "SendTemperingAlert",
+          "Description": "Notify the tempering line operator that a batch's CrystalFormIndex has drifted out of the Form V target range.",
+          "ActionId": "a1e6d0d2-3b7d-4e2a-9c3a-8f2b6e5c4d10",
+          "ParameterBindings": [
+            {
+              "$type": "parameterbindingcontextkey",
+              "Name": "batchId",
+              "Key": "agent:operationalSet:TemperingReading:batchId",
+              "Description": "Identifier of the affected batch"
+            },
+            {
+              "$type": "parameterbindingcontextkey",
+              "Name": "crystalFormIndex",
+              "Key": "agent:operationalSet:TemperingReading:crystalFormIndex",
+              "Description": "Out-of-range CrystalFormIndex reading"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "shouldRun": true
+}

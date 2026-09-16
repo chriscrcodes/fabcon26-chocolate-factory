@@ -1,0 +1,21 @@
+{
+  "id": "15593599313766281",
+  "dataBindingTable": {
+    "sourceType": "LakehouseTable",
+    "workspaceId": "{{ .WorkspaceId }}",
+    "itemId": "{{ .LakehouseId }}",
+    "sourceTableName": "batch_material_usage"
+  },
+  "sourceKeyRefBindings": [
+    {
+      "sourceColumnName": "UsageId",
+      "targetPropertyId": "1035269960491915996"
+    }
+  ],
+  "targetKeyRefBindings": [
+    {
+      "sourceColumnName": "MaterialId",
+      "targetPropertyId": "1151932460490019255"
+    }
+  ]
+}

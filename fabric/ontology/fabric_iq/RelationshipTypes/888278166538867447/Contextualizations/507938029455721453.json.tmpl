@@ -1,0 +1,21 @@
+{
+  "id": "507938029455721453",
+  "dataBindingTable": {
+    "sourceType": "LakehouseTable",
+    "workspaceId": "{{ .WorkspaceId }}",
+    "itemId": "{{ .LakehouseId }}",
+    "sourceTableName": "silver_packaging"
+  },
+  "sourceKeyRefBindings": [
+    {
+      "sourceColumnName": "LineId",
+      "targetPropertyId": "1039932003763487644"
+    }
+  ],
+  "targetKeyRefBindings": [
+    {
+      "sourceColumnName": "BatchId",
+      "targetPropertyId": "437529534197250178"
+    }
+  ]
+}

@@ -1,0 +1,265 @@
+{
+  "scenario": "chocolate",
+  "name": "Chocolate Factory",
+  "description": "Four chocolate factories (Barcelona, Chicago, São Paulo, Singapore), each running 2-3 production lines through the in-factory stages of chocolate making (grinding through packaging), plus the supply chain and ERP data around them. Farm Preparation (harvest, fermentation, drying, roasting, winnowing) happens near cocoa origin, upstream of these factories -- see ../../CHOCOLATE-FACTORY.md -- and is represented here only as incoming 'Cocoa Nibs' material from suppliers.",
+  "tables": {
+    "factory": {
+      "columns": ["FactoryId", "Code", "City", "Country", "Region", "TimeZone"],
+      "types": {
+        "FactoryId": "String",
+        "Code": "String",
+        "City": "String",
+        "Country": "String",
+        "Region": "String",
+        "TimeZone": "String"
+      },
+      "key": "FactoryId",
+      "source_table": "factory"
+    },
+    "production_line": {
+      "columns": ["LineId", "FactoryId", "LineNumber", "Name"],
+      "types": {
+        "LineId": "String",
+        "FactoryId": "String",
+        "LineNumber": "Int",
+        "Name": "String"
+      },
+      "key": "LineId",
+      "source_table": "production_line"
+    },
+    "production_stage": {
+      "columns": ["StageId", "Phase", "Name", "SequenceOrder"],
+      "types": {
+        "StageId": "String",
+        "Phase": "String",
+        "Name": "String",
+        "SequenceOrder": "Int"
+      },
+      "key": "StageId",
+      "source_table": "production_stage"
+    },
+    "recipe": {
+      "columns": ["RecipeId", "Name", "CacaoPercent", "MilkPercent", "SugarPercent"],
+      "types": {
+        "RecipeId": "String",
+        "Name": "String",
+        "CacaoPercent": "Float",
+        "MilkPercent": "Float",
+        "SugarPercent": "Float"
+      },
+      "key": "RecipeId",
+      "source_table": "recipe"
+    },
+    "batch": {
+      "columns": ["BatchId", "LineId", "RecipeId", "StartTime", "EndTime", "QuantityKg", "Status"],
+      "types": {
+        "BatchId": "String",
+        "LineId": "String",
+        "RecipeId": "String",
+        "StartTime": "DateTime",
+        "EndTime": "DateTime",
+        "QuantityKg": "Float",
+        "Status": "String"
+      },
+      "key": "BatchId",
+      "source_table": "batch",
+      "notes": "Materialized from bronze_batch_event (EventType: Started/Completed), streamed by the data generator at the first tick of grinding and the last tick of packaging -- not inferred from sensor_reading timing."
+    },
+    "sensor_reading": {
+      "columns": ["ReadingId", "LineId", "StageId", "BatchId", "Timestamp", "Metric", "Value", "Unit"],
+      "types": {
+        "ReadingId": "String",
+        "LineId": "String",
+        "StageId": "String",
+        "BatchId": "String",
+        "Timestamp": "DateTime",
+        "Metric": "String",
+        "Value": "Float",
+        "Unit": "String"
+      },
+      "key": "ReadingId",
+      "source_table": "sensor_reading",
+      "notes": "Streamed in real time from the data generator to Azure Event Hub -> Fabric Eventstream -> Eventhouse. One row per metric per tick (EAV shape) so new metrics never require a schema change."
+    },
+    "quality_check": {
+      "columns": ["CheckId", "BatchId", "LineId", "StageId", "Timestamp", "DefectRate", "Result", "Notes"],
+      "types": {
+        "CheckId": "String",
+        "BatchId": "String",
+        "LineId": "String",
+        "StageId": "String",
+        "Timestamp": "DateTime",
+        "DefectRate": "Float",
+        "Result": "String",
+        "Notes": "String"
+      },
+      "key": "CheckId",
+      "source_table": "quality_check"
+    },
+    "line_status": {
+      "columns": ["EventId", "LineId", "Status", "Reason", "Timestamp"],
+      "types": {
+        "EventId": "String",
+        "LineId": "String",
+        "Status": "String",
+        "Reason": "String",
+        "Timestamp": "DateTime"
+      },
+      "key": "EventId",
+      "source_table": "line_status",
+      "notes": "Streamed by the data generator on every Running<->Down transition (state-change log, not a per-tick heartbeat). Status: Running or Down. Reason is set on Down rows only. Feeds Availability in gold_factory_oee_daily."
+    },
+    "supplier": {
+      "columns": ["SupplierId", "Name", "Country", "MaterialType", "Rating"],
+      "types": {
+        "SupplierId": "String",
+        "Name": "String",
+        "Country": "String",
+        "MaterialType": "String",
+        "Rating": "Float"
+      },
+      "key": "SupplierId",
+      "source_table": "supplier"
+    },
+    "material": {
+      "columns": ["MaterialId", "SupplierId", "Type", "LotNumber", "ReceivedDate", "QuantityKg"],
+      "types": {
+        "MaterialId": "String",
+        "SupplierId": "String",
+        "Type": "String",
+        "LotNumber": "String",
+        "ReceivedDate": "Date",
+        "QuantityKg": "Float"
+      },
+      "key": "MaterialId",
+      "source_table": "material",
+      "notes": "Type includes 'Cocoa Nibs' -- the output of the off-site Farm Preparation phase -- alongside Sugar, Milk, Packaging."
+    },
+    "inventory": {
+      "columns": ["InventoryId", "FactoryId", "MaterialId", "QuantityOnHand", "ReorderLevel", "LastUpdated"],
+      "types": {
+        "InventoryId": "String",
+        "FactoryId": "String",
+        "MaterialId": "String",
+        "QuantityOnHand": "Float",
+        "ReorderLevel": "Float",
+        "LastUpdated": "DateTime"
+      },
+      "key": "InventoryId",
+      "source_table": "inventory"
+    },
+    "batch_material_usage": {
+      "columns": ["UsageId", "BatchId", "MaterialId", "QuantityKg"],
+      "types": {
+        "UsageId": "String",
+        "BatchId": "String",
+        "MaterialId": "String",
+        "QuantityKg": "Float"
+      },
+      "key": "UsageId",
+      "source_table": "batch_material_usage",
+      "notes": "Junction table closing the batch -> material/supplier lot-traceability gap -- which material lots (and so which suppliers) fed a specific batch. BatchId is a loose, cross-plane reference to the Eventhouse's batch, same as shipment.BatchId, not a real FK."
+    },
+    "shipment": {
+      "columns": ["ShipmentId", "FromFactoryId", "ToLocationId", "BatchId", "Carrier", "DepartDate", "ArriveDate", "Status"],
+      "types": {
+        "ShipmentId": "String",
+        "FromFactoryId": "String",
+        "ToLocationId": "String",
+        "BatchId": "String",
+        "Carrier": "String",
+        "DepartDate": "Date",
+        "ArriveDate": "Date",
+        "Status": "String"
+      },
+      "key": "ShipmentId",
+      "source_table": "shipment"
+    },
+    "customer": {
+      "columns": ["CustomerId", "Name", "Country", "Segment", "CreditLimit"],
+      "types": {
+        "CustomerId": "String",
+        "Name": "String",
+        "Country": "String",
+        "Segment": "String",
+        "CreditLimit": "Float"
+      },
+      "key": "CustomerId",
+      "source_table": "customer"
+    },
+    "product": {
+      "columns": ["ProductId", "Name", "RecipeId", "PackagingType", "SKU"],
+      "types": {
+        "ProductId": "String",
+        "Name": "String",
+        "RecipeId": "String",
+        "PackagingType": "String",
+        "SKU": "String"
+      },
+      "key": "ProductId",
+      "source_table": "product"
+    },
+    "sales_order": {
+      "columns": ["OrderId", "CustomerId", "OrderDate", "Status", "TotalAmount", "Currency"],
+      "types": {
+        "OrderId": "String",
+        "CustomerId": "String",
+        "OrderDate": "Date",
+        "Status": "String",
+        "TotalAmount": "Float",
+        "Currency": "String"
+      },
+      "key": "OrderId",
+      "source_table": "sales_order"
+    },
+    "order_line": {
+      "columns": ["OrderLineId", "OrderId", "ProductId", "QuantityKg", "UnitPrice"],
+      "types": {
+        "OrderLineId": "String",
+        "OrderId": "String",
+        "ProductId": "String",
+        "QuantityKg": "Float",
+        "UnitPrice": "Float"
+      },
+      "key": "OrderLineId",
+      "source_table": "order_line"
+    },
+    "invoice": {
+      "columns": ["InvoiceId", "OrderId", "IssueDate", "DueDate", "AmountDue", "PaidDate"],
+      "types": {
+        "InvoiceId": "String",
+        "OrderId": "String",
+        "IssueDate": "Date",
+        "DueDate": "Date",
+        "AmountDue": "Float",
+        "PaidDate": "Date"
+      },
+      "key": "InvoiceId",
+      "source_table": "invoice"
+    }
+  },
+  "relationships": [
+    { "name": "line_to_factory", "from": "production_line", "to": "factory", "fromKey": "FactoryId", "toKey": "FactoryId" },
+    { "name": "batch_to_line", "from": "batch", "to": "production_line", "fromKey": "LineId", "toKey": "LineId" },
+    { "name": "batch_to_recipe", "from": "batch", "to": "recipe", "fromKey": "RecipeId", "toKey": "RecipeId" },
+    { "name": "reading_to_line", "from": "sensor_reading", "to": "production_line", "fromKey": "LineId", "toKey": "LineId" },
+    { "name": "reading_to_stage", "from": "sensor_reading", "to": "production_stage", "fromKey": "StageId", "toKey": "StageId" },
+    { "name": "reading_to_batch", "from": "sensor_reading", "to": "batch", "fromKey": "BatchId", "toKey": "BatchId" },
+    { "name": "check_to_batch", "from": "quality_check", "to": "batch", "fromKey": "BatchId", "toKey": "BatchId" },
+    { "name": "check_to_line", "from": "quality_check", "to": "production_line", "fromKey": "LineId", "toKey": "LineId" },
+    { "name": "check_to_stage", "from": "quality_check", "to": "production_stage", "fromKey": "StageId", "toKey": "StageId" },
+    { "name": "line_status_to_line", "from": "line_status", "to": "production_line", "fromKey": "LineId", "toKey": "LineId" },
+    { "name": "material_to_supplier", "from": "material", "to": "supplier", "fromKey": "SupplierId", "toKey": "SupplierId" },
+    { "name": "inventory_to_material", "from": "inventory", "to": "material", "fromKey": "MaterialId", "toKey": "MaterialId" },
+    { "name": "inventory_to_factory", "from": "inventory", "to": "factory", "fromKey": "FactoryId", "toKey": "FactoryId" },
+    { "name": "shipment_to_factory", "from": "shipment", "to": "factory", "fromKey": "FromFactoryId", "toKey": "FactoryId" },
+    { "name": "shipment_to_batch", "from": "shipment", "to": "batch", "fromKey": "BatchId", "toKey": "BatchId" },
+    { "name": "usage_to_batch", "from": "batch_material_usage", "to": "batch", "fromKey": "BatchId", "toKey": "BatchId" },
+    { "name": "usage_to_material", "from": "batch_material_usage", "to": "material", "fromKey": "MaterialId", "toKey": "MaterialId" },
+    { "name": "product_to_recipe", "from": "product", "to": "recipe", "fromKey": "RecipeId", "toKey": "RecipeId" },
+    { "name": "order_to_customer", "from": "sales_order", "to": "customer", "fromKey": "CustomerId", "toKey": "CustomerId" },
+    { "name": "orderline_to_order", "from": "order_line", "to": "sales_order", "fromKey": "OrderId", "toKey": "OrderId" },
+    { "name": "orderline_to_product", "from": "order_line", "to": "product", "fromKey": "ProductId", "toKey": "ProductId" },
+    { "name": "invoice_to_order", "from": "invoice", "to": "sales_order", "fromKey": "OrderId", "toKey": "OrderId" }
+  ]
+}

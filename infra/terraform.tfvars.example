@@ -1,0 +1,44 @@
+# --- Azure / Event Hub ---
+
+# Mandatory -- pins the deployment to a specific subscription rather
+# than whatever happens to be active in the deployer's `az` CLI
+# context. Get with: az account show --query id -o tsv
+subscription_id = "<your-subscription-id>"
+
+resource_group_name = "<your-rg>"
+
+# false (default): resource_group_name must already exist, e.g.
+#   az group create -n <your-rg> -l westeurope
+# true: Terraform creates resource_group_name itself in var.location.
+# create_resource_group = false
+
+name_prefix = "cacao"
+
+# Defaults to "westeurope" if omitted. Fabric IQ (the Ontology's
+# underlying workload) isn't available in regions where Power BI is
+# the only Fabric workload -- confirm your target region supports the
+# full Fabric stack before applying:
+# https://learn.microsoft.com/en-us/fabric/admin/region-availability#power-bi
+# location = "westeurope"
+
+# Get with: az ad signed-in-user show --query id -o tsv
+user_object_id = "<YOUR_AAD_OBJECT_ID>"
+
+# Usually leave this empty -- fabric.tf resolves it automatically when
+# enable_workspace_identity = true below. Only set directly if managing
+# the Fabric workspace outside this config.
+workspace_identity_principal_id = ""
+
+# --- Fabric ---
+# capacity.tf provisions a real Azure-provisioned Fabric capacity (trial
+# capacities are an unsupported, documented limitation of the fabric
+# provider), and fabric.tf creates a dedicated workspace on it.
+
+new_workspace_display_name = "Chocolate Factory"
+fabric_capacity_sku        = "F2"
+# fabric_capacity_name      = ""   # leave empty for a deterministic default, see variables_fabric.tf
+
+# At least one Fabric capacity admin (UPN or object ID) is required.
+fabric_capacity_admin_members = ["<your-upn-or-object-id>"]
+
+# enable_workspace_identity = true   # optional -- see variables_fabric.tf

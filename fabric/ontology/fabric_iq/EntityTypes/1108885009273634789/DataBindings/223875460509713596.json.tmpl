@@ -1,0 +1,30 @@
+{
+  "id": "223875460509713596",
+  "dataBindingConfiguration": {
+    "dataBindingType": "NonTimeSeries",
+    "propertyBindings": [
+      {
+        "sourceColumnName": "StageId",
+        "targetPropertyId": "186229795881521293"
+      },
+      {
+        "sourceColumnName": "Phase",
+        "targetPropertyId": "1135916957322581160"
+      },
+      {
+        "sourceColumnName": "Name",
+        "targetPropertyId": "84331476083058706"
+      },
+      {
+        "sourceColumnName": "SequenceOrder",
+        "targetPropertyId": "969320679694436379"
+      }
+    ],
+    "sourceTableProperties": {
+      "sourceType": "LakehouseTable",
+      "workspaceId": "{{ .WorkspaceId }}",
+      "itemId": "{{ .LakehouseId }}",
+      "sourceTableName": "production_stage"
+    }
+  }
+}

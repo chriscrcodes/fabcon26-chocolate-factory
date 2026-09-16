@@ -1,0 +1,34 @@
+{
+  "id": "555733990133052153",
+  "dataBindingConfiguration": {
+    "dataBindingType": "NonTimeSeries",
+    "propertyBindings": [
+      {
+        "sourceColumnName": "ProductId",
+        "targetPropertyId": "470695028645872827"
+      },
+      {
+        "sourceColumnName": "Name",
+        "targetPropertyId": "751979108608579343"
+      },
+      {
+        "sourceColumnName": "RecipeId",
+        "targetPropertyId": "611709111081633586"
+      },
+      {
+        "sourceColumnName": "PackagingType",
+        "targetPropertyId": "292016775648332448"
+      },
+      {
+        "sourceColumnName": "SKU",
+        "targetPropertyId": "821941569493860501"
+      }
+    ],
+    "sourceTableProperties": {
+      "sourceType": "LakehouseTable",
+      "workspaceId": "{{ .WorkspaceId }}",
+      "itemId": "{{ .LakehouseId }}",
+      "sourceTableName": "product"
+    }
+  }
+}
